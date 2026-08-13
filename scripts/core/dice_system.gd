@@ -72,6 +72,25 @@ func attr_to_bonus(attr_value: int) -> int:
 			return 3 if attr_value >= 21 else 0
 
 # ============================================================
+# 属性加权判定（属性 → 加值 → 掷骰 → 判定，一步到位）
+# ============================================================
+# 直接传「属性原始值」即可完成一次加权判定，内部复用 attr_to_bonus + roll_dice。
+# 返回结构与 roll_dice 完全兼容（tier / roll_value / final_value 平铺可读），
+# 并额外附带 attr_value / difficulty / success / margin 字段，旧调用不受影响。
+# difficulty：判定难度目标值，默认 7（2d6 均值，普通难度）；<=0 时无门槛，退化为纯加权掷骰。
+# margin：最终值 - 难度，正为成功度（超出多少）、负为失败度（差多少）。
+func roll_attribute_check(attr_value: int, difficulty: int = 7, luck_mod: int = 0,
+                          dice_formula: String = "2d6") -> Dictionary:
+	var attr_bonus = attr_to_bonus(attr_value)                    # 属性 → 加值（非线性映射）
+	var result = roll_dice(dice_formula, attr_bonus, luck_mod)    # 掷骰 → 4 段结果
+	var check = result.duplicate()                                # 铺平旧结果，保持超集兼容
+	check["attr_value"] = attr_value
+	check["difficulty"] = difficulty
+	check["success"] = difficulty <= 0 or result.final_value >= difficulty
+	check["margin"] = result.final_value - difficulty
+	return check
+
+# ============================================================
 # 加权随机选择
 # ============================================================
 func weighted_random_select(items: Array, weight_key: String = "weight") -> Dictionary:

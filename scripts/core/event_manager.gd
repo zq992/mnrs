@@ -88,20 +88,33 @@ func check_and_trigger() -> Dictionary:
 	if _event_pool.is_empty():
 		_create_builtin_events()
 
-	# 检查冷却——同一事件不会在短时间内重复触发
-	var available_events = []
+	# 季节联动：读取当前季节（春/夏/秋/冬），事件可在 JSON 声明 seasons 限定季节
+	var season_name = _season_name()
+
+	# 候选事件：冷却通过 + 前置条件 + 季节匹配，同时计算当季权重
+	var weighted_events: Array = []
 	for event in _event_pool:
 		var event_id = event.get("id", "")
 		var last_triggered = _event_cooldowns.get(event_id, -999)
-		if GameState.current_year - last_triggered >= 1:
-			if _check_prerequisites(event):
-				available_events.append(event)
+		# 冷却——同一事件不会在短时间内重复触发
+		if GameState.current_year - last_triggered < 1:
+			continue
+		if not _check_prerequisites(event):
+			continue
+		# 季节限定：声明了 seasons 的事件仅在对应季节出现
+		var seasons = event.get("seasons", [])
+		var is_seasonal: bool = seasons is Array and not seasons.is_empty()
+		if is_seasonal and not seasons.has(season_name):
+			continue
+		var weight = _event_weight(event, is_seasonal)
+		if weight > 0:
+			weighted_events.append({"event": event, "weight": weight})
 
-	if available_events.is_empty():
+	if weighted_events.is_empty():
 		return {}
 
-	# 加权随机选择
-	var selected = DiceSystem.weighted_random_select(available_events, "trigger_weight.base")
+	# 加权随机选择（本地实现，正确读取 trigger_weight.base）
+	var selected = _weighted_pick(weighted_events)
 	if selected.is_empty():
 		return {}
 
@@ -120,6 +133,42 @@ func trigger_specific_event(event_id: String) -> Dictionary:
 				event_ready.emit(event)
 				return event
 	return {}
+
+# ============================================================
+# 季节联动 + 加权随机抽取
+# ============================================================
+# 季节限定事件在当季的权重加成倍数（事件可用 trigger_weight.season_boost 覆盖）
+const SEASON_BOOST_DEFAULT := 1.5
+
+# 当前季节中文名（复用 TimeManager.get_season_name：春/夏/秋/冬）。
+# 事件 JSON 可声明 "seasons": ["春","秋"] 限定只在对应季节出现；
+# 不声明 seasons 的事件四季通用（向后兼容）。
+func _season_name() -> String:
+	return TimeManager.get_season_name()
+
+# 计算事件当季权重：基础权重 trigger_weight.base（缺省 1.0），
+# 季节限定事件再乘 season_boost，使当季专属事件更易触发。
+func _event_weight(event: Dictionary, is_seasonal: bool) -> float:
+	var weight = float(event.get("trigger_weight", {}).get("base", 1.0))
+	if is_seasonal:
+		weight *= float(event.get("trigger_weight", {}).get("season_boost", SEASON_BOOST_DEFAULT))
+	return weight
+
+# 按权重随机抽取。本地实现原因：DiceSystem.weighted_random_select 用 item.get(weight_key)
+# 只能读顶层键，读不到嵌套的 trigger_weight.base（会全部退化为权重 1.0，等价均匀随机）。
+func _weighted_pick(weighted: Array) -> Dictionary:
+	var total: float = 0.0
+	for entry in weighted:
+		total += float(entry.get("weight", 0.0))
+	if total <= 0:
+		return {}
+	var roll = randf() * total
+	var cumulative: float = 0.0
+	for entry in weighted:
+		cumulative += float(entry.get("weight", 0.0))
+		if roll <= cumulative:
+			return entry.get("event", {})
+	return weighted.back().get("event", {})
 
 # ============================================================
 # 前置条件检查
@@ -256,6 +305,9 @@ func _apply_effects(effects_str: String) -> Array:
 							CharacterManager.modify_health(char, value)
 						"ambition":
 							CharacterManager.modify_ambition(char, value)
+						"con", "int", "str", "cha", "vir", "luk":
+							# 六维属性成长——事件 JSON 可驱动天资增减（此前会 push_warning 静默失败）
+							CharacterManager.modify_attribute(char, attr, value)
 						_:
 							push_warning("未知效果属性: %s" % attr)
 

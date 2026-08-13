@@ -111,6 +111,7 @@ const BIRTH_STATES: Array = [
 var _clan_validated: bool = false
 var _state_option: OptionButton = null
 var _reroll_used: bool = false
+var _guide_label: Label = null  # 新手引导进度条（顶部）
 
 func _ready() -> void:
 	dynasty_label.text = "朝代：西周（公元前1046年——前771年）| 民族：华族"
@@ -206,16 +207,34 @@ func _ready() -> void:
 	age_slider.visible = false
 	age_label.text = "年龄：0岁（新生儿）"
 
-	# 隐藏属性掷骰区域（基础属性自动生成，无需玩家手动掷骰）
-	$Panel/VBoxContainer/AttrTitle.visible = false
-	$Panel/VBoxContainer/AttrContainer.visible = false
-	reroll_button.visible = false
+	# ── 属性可见化（参考日报 8-11 建议二）：恢复六维显示 + 一次重掷，玩家不再"开盲盒" ──
+	$Panel/VBoxContainer/AttrTitle.visible = true
+	$Panel/VBoxContainer/AttrContainer.visible = true
+	reroll_button.visible = true
+	reroll_button.pressed.connect(_on_reroll_pressed)
 
-	# 自动生成基础属性（3d6掷骰，不显示给玩家）
+	# 自动生成基础属性（3d6掷骰），并立即把六维 + 总评刷新到界面
 	_roll_attributes()
+	_update_attr_display()
 
 	# 按钮
 	create_button.pressed.connect(_on_create_pressed)
+
+	# ── 新手引导：顶部进度提示条，实时标注创建进度 ──
+	_guide_label = Label.new()
+	_guide_label.name = "GuideLabel"
+	_guide_label.add_theme_font_size_override("font_size", 13)
+	_guide_label.add_theme_color_override("font_color", Color(0.78, 0.7, 0.48, 1.0))
+	vbox.add_child(_guide_label)
+	vbox.move_child(_guide_label, 1)  # 紧跟朝代标题，第一时间可见
+	_refresh_guide()
+
+	# ── 操作流程优化：氏名回车=验证，名字回车=创建；输入改动实时刷新进度 ──
+	_clan_input.text_changed.connect(_on_clan_text_changed)
+	_clan_input.text_submitted.connect(func(_t: String) -> void: _on_validate_clan_pressed())
+	name_input.text_changed.connect(_on_name_text_changed)
+	name_input.text_submitted.connect(func(_t: String) -> void: _on_create_pressed())
+	_clan_input.call_deferred("grab_focus")
 
 func _update_clan_options(_index: int) -> void:
 	# 氏改为自由输入（原 OptionButton 已隐藏）
@@ -225,6 +244,26 @@ func _on_surname_changed(index: int) -> void:
 	_update_clan_options(index)
 	_clan_validated = false  # 换姓后需重新验证
 	info_label.text = "姓氏已变更，请重新验证氏名。"
+	_refresh_guide()
+
+func _refresh_guide() -> void:
+	# 新手引导：用 ✓/□ 实时标注创建进度，玩家一眼看清还差哪一步
+	if _guide_label == null:
+		return
+	var clan_done := _clan_validated
+	var name_done := not name_input.text.strip_edges().is_empty()
+	_guide_label.text = "创建流程：✓选姓 → %s氏名 → ✓出生国 → %s取名 → ✓查看天资" % [
+		"✓" if clan_done else "□", "✓" if name_done else "□",
+	]
+
+func _on_clan_text_changed(_new_text: String) -> void:
+	# 氏名一旦改动，先前验证即失效，需重新验证
+	if _clan_validated:
+		_clan_validated = false
+	_refresh_guide()
+
+func _on_name_text_changed(_new_text: String) -> void:
+	_refresh_guide()
 
 func _validate_clan_basic(clan_text: String) -> String:
 	"""基础格式验证，返回错误信息或空字符串"""
@@ -260,6 +299,7 @@ func _on_validate_clan_pressed() -> void:
 	if origin == surname:
 		info_label.text = "\u2713 验证通过：\u300c" + clan + "\u300d氏 源自 " + surname + "姓。"
 		_clan_validated = true
+		_refresh_guide()
 	else:
 		info_label.text = "\u2717 验证失败：\u300c" + clan + "\u300d氏 源自 " + origin + "姓，而非 " + surname + "姓。请更换姓氏后重试。"
 		_clan_validated = false
@@ -275,7 +315,7 @@ func _roll_attributes() -> void:
 		"luk": randi_range(1, 6) + randi_range(1, 6) + randi_range(1, 6),
 	}
 	_inherited_wealth = 30 + randi_range(0, 60)
-	# 基础属性自动生成（3d6），不再在界面上显示，直接进入游戏
+	# 基础属性自动生成（3d6）；六维与总评随后由 _update_attr_display 刷新到界面
 	info_label.text = "家族遗产：%d 石 | 默认等级：士" % _inherited_wealth
 
 func _on_reroll_pressed() -> void:
@@ -284,6 +324,7 @@ func _on_reroll_pressed() -> void:
 		info_label.text = "重掷次数已用尽。命运已定，请创建角色。"
 		return
 	_roll_attributes()
+	_update_attr_display()  # 重掷后刷新六维与总评
 	_reroll_used = true
 	reroll_button.disabled = true
 	reroll_button.text = "已用尽"

@@ -22,6 +22,11 @@ func _ready() -> void:
 	VisualConfig.style_body_label(text_label, 15)
 	VisualConfig.style_button(close_button, 14)
 
+	# 轻动效：面板淡入（青铜浮现）
+	panel.modulate.a = 0.0
+	var entrance := create_tween()
+	entrance.tween_property(panel, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)
+
 	_event_data = EventManager.get_current_event()
 	if _event_data.is_empty():
 		# 不是事件触发——等待外部调用 show_action_result() 填充内容
@@ -41,10 +46,11 @@ func _ready() -> void:
 		_illustration_rect.custom_minimum_size = Vector2(600, 280)
 		_illustration_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-		# 添加轻动效
-		_illustration_rect.scale = Vector2(0.5, 0.5)
-		_illustration_rect.fade_out(0.5) # 淡出效果，持续0.5秒
-		_illustration_rect.scale = Vector2(1, 1) # 恢复原始大小
+		# 轻动效：画卷徐徐展开（淡入）。
+		# 插图是 VBoxContainer 子节点，位置由容器布局接管，故只动 modulate 不动 position。
+		_illustration_rect.modulate.a = 0.0
+		var illu_tw := create_tween()
+		illu_tw.tween_property(_illustration_rect, "modulate:a", 1.0, 0.3)
 
 		# 插入到 VBoxContainer 的标题和正文之间
 		var vbox: VBoxContainer = $Panel/VBoxContainer
@@ -72,7 +78,7 @@ func _on_choice_made(choice_index: int) -> void:
 
 	_resolved = true
 
-	# 禁用所有选择按钮
+	# 操作反馈：点选后立刻禁用其余选项
 	for child in choices_container.get_children():
 		if child is Button:
 			child.disabled = true
@@ -81,36 +87,27 @@ func _on_choice_made(choice_index: int) -> void:
 	var result = EventManager.resolve_choice(choice_index)
 	if result.has("error"):
 		result_label.text = "错误：%s" % result.error
-		close_button.visible = true
+		_show_close()
 		return
 
-	# 显示结果
+	# ── 掷骰逐级揭示：先露「?」，再翻点数，最后翻结果段名 ──
+	# 制造「骰子落定 / 卜筮问天」的悬念感（操作反馈 + 轻动效）
 	var roll = result.result
-	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]
-	"
-	result_label.text += "掷骰：2d6 = %d | 属性加值：%d | 最终：%d\n" % [roll.roll_value, roll.attr_bonus, roll.final_value]
-	result_label.text += "[color=#ffcc00]%s[/color]" % roll.tier_name
-
-	result_label.text += result.description
-
-	# 显示效果
-	if not result.effects.is_empty():
-		result_label.text +=
-
-[color=#80ff80]效果：[/color]
-	"
-	for eff in result.effects:
-		var type = eff.get("type", "")
-		var value = eff.get("value", 0)
-		if type == "skill":
-			result_label.text +=
-				\n  · %s Lv%d" % [eff.get("name", ""), value]
-		elif value > 0:
-			result_label.text +=
-				\n  · %s +%d" % [type, value]
-		elif value < 0:
-			result_label.text +=
-				\n  · %s %d" % [type, value]
+	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
+	result_label.text += "掷骰：2d6 = [color=#ffcc00]?[/color]\n"
+	var tw := create_tween()
+	tw.tween_interval(0.4)
+	tw.tween_callback(func():
+		result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
+		result_label.text += "掷骰：2d6 = %d | 属性加值：%d | 最终：%d\n" % [roll.roll_value, roll.attr_bonus, roll.final_value]
+	)
+	tw.tween_interval(0.3)
+	tw.tween_callback(func():
+		result_label.text += "[color=#ffcc00]%s[/color]" % roll.tier_name
+		result_label.text += result.description
+		result_label.text += _effects_text(result.effects)
+		_show_close()
+	)
 
 func _on_close() -> void:
 	queue_free()
@@ -130,27 +127,40 @@ func show_action_result(action_title: String, body_text: String, dice_result: Di
 
 	# 骰子结果
 	var roll = dice_result
-	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]
-	"
-	result_label.text += "掷骰：2d6 = %d | 属性加值：%+d | 最终：%d
-" % [roll.get("roll_value", 0), roll.get("attr_bonus", 0), roll.get("final_value", 0)]
+	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
+	result_label.text += "掷骰：2d6 = %d | 属性加值：%+d | 最终：%d\n" % [roll.get("roll_value", 0), roll.get("attr_bonus", 0), roll.get("final_value", 0)]
 	result_label.text += "[color=#ffcc00]%s[/color]" % roll.get("tier_name", "")
+	result_label.text += _effects_text(effects)
 
-	# 效果
+	# 轻动效：结果淡入
+	result_label.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(result_label, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)
+	_show_close()
+
+# ============================================================
+# 效果列表文本（事件选择 / 行动结果共用）
+# ============================================================
+func _effects_text(effects: Array) -> String:
+	var out := ""
 	if not effects.is_empty():
-		result_label.text +=
+		out += "\n[color=#80ff80]效果：[/color]\n"
+		for eff in effects:
+			var type = eff.get("type", "")
+			var value = eff.get("value", 0)
+			if type == "skill":
+				out += "\n  · %s Lv%d" % [eff.get("name", ""), value]
+			elif value > 0:
+				out += "\n  · %s +%d" % [type, value]
+			elif value < 0:
+				out += "\n  · %s %d" % [type, value]
+	return out
 
-[color=#80ff80]效果：[/color]
-	"
-	for eff in effects:
-		var eff_type = eff.get("type", "")
-		var value = eff.get("value", 0)
-		if eff_type == "skill":
-			result_label.text +=
-				\n  · %s Lv%d" % [eff.get("name", ""), value]
-		elif value > 0:
-			result_label.text +=
-				\n  · %s +%d" % [eff_type, value]
-		elif value < 0:
-			result_label.text +=
-				\n  · %s %d" % [eff_type, value]
+# ============================================================
+# 关闭按钮淡入（操作反馈：结果呈现后才出现「关闭」）
+# ============================================================
+func _show_close() -> void:
+	close_button.visible = true
+	close_button.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(close_button, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)

@@ -8,7 +8,30 @@ extends Node
 enum Season { SPRING, SUMMER, AUTUMN, WINTER }
 
 var current_season: int = Season.SPRING
-var month: int = 1  # 1-12
+var month: int = 1  # 当前月 1-12（每季推进3个月：春1→夏4→秋7→冬10）
+
+# 季节推进信号：旧季节 / 新季节 / 年份，供节气·节庆·动画订阅
+signal season_changed(old_season: int, new_season: int, year: int)
+
+# ============================================================
+# 二十四节气（按月排列，每季6气，季首即"立春/立夏/立秋/立冬"）
+# ============================================================
+const SOLAR_TERMS := [
+	"立春", "雨水", "惊蛰", "春分", "清明", "谷雨",
+	"立夏", "小满", "芒种", "夏至", "小暑", "大暑",
+	"立秋", "处暑", "白露", "秋分", "寒露", "霜降",
+	"立冬", "小雪", "大雪", "冬至", "小寒", "大寒",
+]
+
+# ============================================================
+# 四时节庆（西周宗庙四时祭）：春礿 / 夏禘 / 秋尝 / 冬烝
+# ============================================================
+const SEASON_RITES := {
+	Season.SPRING: {"name": "春祭·礿", "blessing": "祀先祖、祈丰年，四时祭之始"},
+	Season.SUMMER: {"name": "夏祭·禘", "blessing": "序昭穆、祭祖考，报夏之盛德"},
+	Season.AUTUMN: {"name": "秋祭·尝", "blessing": "荐新谷于先祖，报秋成之喜"},
+	Season.WINTER: {"name": "冬祭·烝", "blessing": "岁末大祭进品物，合聚先祖之灵"},
+}
 
 # ============================================================
 # 季节推进
@@ -16,9 +39,12 @@ var month: int = 1  # 1-12
 func advance_season() -> int:
 	var old_season = current_season
 	current_season = (current_season + 1) % 4
+	# 月份随季节直接对齐（春1→夏4→秋7→冬10），并自愈旧档可能的不同步
+	month = current_season * 3 + 1
 	# 季节从冬回到春时，年份+1
 	if current_season == Season.SPRING and old_season == Season.WINTER:
 		GameState.current_year += 1
+	season_changed.emit(old_season, current_season, GameState.current_year)
 	return current_season
 
 func get_season_name() -> String:
@@ -35,6 +61,38 @@ func get_season_movement_modifier() -> float:
 		Season.SUMMER: return 1.0
 		Season.AUTUMN: return 0.9   # 秋高气爽
 		_: return 1.5   # 冬季大雪
+
+# ============================================================
+# 节气查询（二十四节气）
+# ============================================================
+# 当前节气：游戏按"季"推进，故取本季起始节气（立春/立夏/立秋/立冬）
+func get_current_solar_term() -> String:
+	return SOLAR_TERMS[current_season * 6]
+
+# 某季全部6个节气（season 缺省为当前季，0春/1夏/2秋/3冬）
+func get_season_solar_terms(season: int = -1) -> Array:
+	var s: int = current_season if season < 0 else season
+	var start: int = s * 6
+	return SOLAR_TERMS.slice(start, start + 6)
+
+# 按序号取节气名（0-23，越界返回空串）
+func get_solar_term_name(index: int) -> String:
+	if index < 0 or index >= SOLAR_TERMS.size():
+		return ""
+	return SOLAR_TERMS[index]
+
+# ============================================================
+# 节庆查询（四时祭）
+# ============================================================
+# 当前季节庆，返回 {name, blessing}
+func get_current_festival() -> Dictionary:
+	return SEASON_RITES.get(current_season, {"name": "", "blessing": ""})
+
+# 某季节庆名（season 缺省为当前季）
+func get_festival_name(season: int = -1) -> String:
+	var s: int = current_season if season < 0 else season
+	var rite: Dictionary = SEASON_RITES.get(s, {})
+	return rite.get("name", "")
 
 # ============================================================
 # 人生阶段检测
