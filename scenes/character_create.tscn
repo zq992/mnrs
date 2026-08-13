@@ -1,0 +1,167 @@
+[gd_scene load_steps=3 format=3 uid="uid://dcharcreate00001"]
+
+[ext_resource type="Script" path="res://scripts/ui/character_create_ui.gd" id="1_charcreate"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+size = 28
+color = Color(0.85, 0.75, 0.5, 1)
+
+[node name="CharacterCreate" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_charcreate")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.1, 0.08, 0.05, 1)
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 15.0
+offset_right = 1260.0
+offset_bottom = 55.0
+text = "你的角色"
+horizontal_alignment = 1
+label_settings = SubResource("LabelSettings_title")
+
+[node name="Panel" type="ScrollContainer" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.1
+anchor_top = 0.1
+anchor_right = 0.9
+anchor_bottom = 0.95
+offset_left = 0.0
+offset_top = 70.0
+offset_right = 0.0
+offset_bottom = -35.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="DynastyLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "朝代：西周 | 民族：华族 | 开局身份：士"
+horizontal_alignment = 1
+
+[node name="Separator1" type="HSeparator" parent="Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="SurnameContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+[node name="SurnameLabel" type="Label" parent="Panel/VBoxContainer/SurnameContainer"]
+layout_mode = 2
+text = "姓（永不可变）："
+custom_minimum_size = Vector2(130, 0)
+[node name="SurnameOption" type="OptionButton" parent="Panel/VBoxContainer/SurnameContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ClanContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+[node name="ClanLabel" type="Label" parent="Panel/VBoxContainer/ClanContainer"]
+layout_mode = 2
+text = "氏（可改变）："
+custom_minimum_size = Vector2(130, 0)
+[node name="ClanOption" type="OptionButton" parent="Panel/VBoxContainer/ClanContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+[node name="NameLabel" type="Label" parent="Panel/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "名："
+custom_minimum_size = Vector2(130, 0)
+[node name="NameInput" type="LineEdit" parent="Panel/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "输入角色名（留空随机生成）"
+
+[node name="ProfessionContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+[node name="ProfLabel" type="Label" parent="Panel/VBoxContainer/ProfessionContainer"]
+layout_mode = 2
+text = "职业（终身锁定）："
+custom_minimum_size = Vector2(130, 0)
+[node name="ProfessionOption" type="OptionButton" parent="Panel/VBoxContainer/ProfessionContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AgeContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+[node name="AgeTextLabel" type="Label" parent="Panel/VBoxContainer/AgeContainer"]
+layout_mode = 2
+text = "年龄："
+custom_minimum_size = Vector2(130, 0)
+[node name="AgeSlider" type="HSlider" parent="Panel/VBoxContainer/AgeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 0.0
+value = 0.0
+step = 1.0
+[node name="AgeLabel" type="Label" parent="Panel/VBoxContainer/AgeContainer"]
+layout_mode = 2
+text = "0岁（新生儿）"
+custom_minimum_size = Vector2(60, 0)
+
+[node name="Separator2" type="HSeparator" parent="Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="AttrTitle" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "—— 基础属性（3d6 掷骰）——"
+horizontal_alignment = 1
+
+[node name="AttrContainer" type="GridContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+columns = 3
+[node name="AttrCon" type="Label" parent="Panel/VBoxContainer/AttrContainer"]
+layout_mode = 2
+text = "体质：?"
+[node name="AttrInt" type="Label" parent="Panel/VBoxContainer/AttrContainer"]
+layout_mode = 2
+text = "智力：?"
+[node name="AttrStr" type="Label" parent="Panel/VBoxContainer/AttrContainer"]
+layout_mode = 2
+text = "武力：?"
+[node name="AttrCha" type="Label" parent="Panel/VBoxContainer/AttrContainer"]
+layout_mode = 2
+text = "魅力：?"
+[node name="AttrVir" type="Label" parent="Panel/VBoxContainer/AttrContainer"]
+layout_mode = 2
+text = "德行：?"
+[node name="AttrLuk" type="Label" parent="Panel/VBoxContainer/AttrContainer"]
+layout_mode = 2
+text = "气运：?"
+
+[node name="InfoLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "选择姓、氏、名，进入西周世界"
+horizontal_alignment = 1
+
+[node name="ButtonContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 20
+
+[node name="RerollButton" type="Button" parent="Panel/VBoxContainer/ButtonContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(150, 40)
+text = "🎲 重新掷骰"
+
+[node name="CreateButton" type="Button" parent="Panel/VBoxContainer/ButtonContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(200, 40)
+text = "进了游戏"

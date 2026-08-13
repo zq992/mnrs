@@ -1,0 +1,15 @@
+# Godot 4 缓存（必须排除）
+.godot/
+
+# 引擎可执行文件（不提交）
+*.exe
+
+# 导入缓存（可选，建议排除减少仓库体积）
+*.import
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# ComfyUI 生成图（可选，视需要）
+# *.png

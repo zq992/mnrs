@@ -1,0 +1,132 @@
+{
+  "id": "western_zhou",
+  "name": "西周",
+  "year_start": -1046,
+  "year_end": -771,
+  "currency": "贝币",
+  "default_ethnicity": "华族",
+  "social_classes": [
+    {"level": 1, "name": "奴隶", "display": "奴隶/贱民"},
+    {"level": 2, "name": "庶人", "display": "庶民/布衣"},
+    {"level": 3, "name": "士", "display": "士/官吏"},
+    {"level": 4, "name": "卿大夫", "display": "卿大夫/将军"},
+    {"level": 5, "name": "诸侯", "display": "诸侯/王"},
+    {"level": 6, "name": "天子", "display": "天子"}
+  ],
+  "available_origins": ["士"],
+  "professions": {
+    "士": [
+      {"id": "邑宰", "name": "邑宰/家臣", "desc": "为卿大夫管理采邑"},
+      {"id": "武士", "name": "武士/甲士", "desc": "乘战车作战的贵族战士"},
+      {"id": "小吏", "name": "小吏", "desc": "在官府中担任文书、书记"},
+      {"id": "门客", "name": "门客/宾客", "desc": "寄身于诸侯卿大夫门下"},
+      {"id": "教师", "name": "教师", "desc": "教授六艺"},
+      {"id": "巫祝", "name": "巫/祝/卜", "desc": "主持祭祀占卜"},
+      {"id": "游士", "name": "游士", "desc": "周游列国寻求出仕"}
+    ],
+    "卿大夫": [
+      {"id": "冢宰", "name": "冢宰/执政", "desc": "总揽朝政的首席大臣"},
+      {"id": "司徒", "name": "司徒", "desc": "掌管土地、人口、教化"},
+      {"id": "司马", "name": "司马", "desc": "掌管军事"},
+      {"id": "司寇", "name": "司寇", "desc": "掌管刑罚、法令"},
+      {"id": "司空", "name": "司空", "desc": "掌管工程、水利"},
+      {"id": "大夫", "name": "大夫(一般)", "desc": "顾问、使者"}
+    ],
+    "诸侯": [
+      {"id": "国君", "name": "国君", "desc": "治理封国、朝觐天子"},
+      {"id": "摄政", "name": "摄政/辅政", "desc": "君主年幼时代理国政"}
+    ]
+  },
+  "rebellion_paths": [
+    {
+      "id": "replace_zhou_son_of_heaven",
+      "name": "取代周天子",
+      "min_identity": "诸侯",
+      "min_power": 70,
+      "required_era": "late",
+      "desc": "率军进入镐京，逼周天子退位，自己成为新的天子"
+    },
+    {
+      "id": "hegemon_vassal",
+      "name": "诸侯称霸",
+      "min_identity": "诸侯",
+      "min_power": 60,
+      "required_era": "mid",
+      "desc": "尊王攘夷——不取代天子但成为诸侯霸主"
+    },
+    {
+      "id": "barbarian_king",
+      "name": "蛮夷称王",
+      "min_identity": "卿大夫",
+      "min_power": 65,
+      "required_era": "any",
+      "desc": "在边境自称为王，挑战周礼秩序"
+    }
+  ],
+  "parallel_villains": [
+    {"name": "鲁侯旦后", "role": "周公旦后代", "original_role": "周礼守护者", "strategy_pool": ["pacify", "conquer", "marry"]},
+    {"name": "齐侯姜氏", "role": "姜子牙后代", "original_role": "东方大国君主", "strategy_pool": ["conquer", "sow_discord", "marry"]},
+    {"name": "召公后裔", "role": "召公奭后代", "original_role": "天命捍卫者", "strategy_pool": ["pacify", "marry", "assassinate"]}
+  ],
+  "map": {
+    "cities": [
+      {"name": "镐京", "type": "capital", "owner": "周天子直辖", "desc": "宗周，王畿核心，西周政治中心"},
+      {"name": "洛邑", "type": "major_city", "owner": "周天子直辖", "desc": "成周，控制东方的军事重镇"},
+      {"name": "鲁(曲阜)", "type": "major_city", "owner": "姬姓鲁国", "desc": "周公旦封国，礼乐文化中心"},
+      {"name": "齐(临淄)", "type": "major_city", "owner": "姜姓齐国", "desc": "姜子牙封国，鱼盐之利"},
+      {"name": "晋(翼城)", "type": "major_city", "owner": "姬姓晋国", "desc": "汾水流域，北方屏障"},
+      {"name": "燕(蓟)", "type": "minor_city", "owner": "姬姓燕国", "desc": "北疆边城"},
+      {"name": "楚(丹阳)", "type": "minor_city", "owner": "芈姓楚国", "desc": "南方蛮荒之地"},
+      {"name": "卫(朝歌)", "type": "minor_city", "owner": "姬姓卫国", "desc": "原商朝都城，监视殷商遗民"},
+      {"name": "郑(新郑)", "type": "minor_city", "owner": "姬姓郑国", "desc": "西周末年新兴诸侯"}
+    ],
+    "passes": [
+      {"name": "函谷关", "location": "镐京-洛邑之间", "desc": "关中通往中原的唯一通道"},
+      {"name": "武关", "location": "镐京东南", "desc": "关中南部门户"},
+      {"name": "太行隘", "location": "晋国边境", "desc": "抵御北方戎狄的屏障"}
+    ],
+    "resources": [
+      {"name": "周原", "type": "青铜铸造", "desc": "西周青铜器铸造技术中心"},
+      {"name": "齐地盐田", "type": "海盐", "desc": "鱼盐之利，极高商业价值"},
+      {"name": "荆山", "type": "铜矿", "desc": "南方最重要的铜矿来源"},
+      {"name": "渭水平原", "type": "良田", "desc": "关中粮仓"}
+    ],
+    "special_locations": [
+      {"name": "牧野", "type": "历史战场", "desc": "武王伐纣决胜之地"},
+      {"name": "岐山", "type": "圣地", "desc": "周人发祥地，凤鸣岐山"},
+      {"name": "骊山", "type": "历史遗迹", "desc": "烽火戏诸侯之山"}
+    ],
+    "threats": [
+      {"name": "犬戎", "direction": "西北", "threat_level": "高", "desc": "周期性入侵，最终攻破镐京"},
+      {"name": "鬼方", "direction": "正北", "threat_level": "中", "desc": "游牧劫掠"},
+      {"name": "西戎", "direction": "正西", "threat_level": "中", "desc": "边境骚扰"},
+      {"name": "东夷", "direction": "正东", "threat_level": "低", "desc": "齐/鲁前线威胁"},
+      {"name": "荆蛮", "direction": "正南", "threat_level": "中", "desc": "楚国前身的南方部落"}
+    ]
+  },
+  "kings": [
+    {"name": "周武王", "given_name": "姬发", "reign_start": -1046, "reign_end": -1043, "era": "克商建周", "desc": "伐纣灭商，建立周朝，分封诸侯"},
+    {"name": "周成王", "given_name": "姬诵", "reign_start": -1043, "reign_end": -1021, "era": "周公辅政", "desc": "年幼即位，周公旦摄政七年，制礼作乐"},
+    {"name": "周康王", "given_name": "姬钊", "reign_start": -1021, "reign_end": -996, "era": "成康之治", "desc": "天下安宁，刑措四十余年不用"},
+    {"name": "周昭王", "given_name": "姬瑕", "reign_start": -996, "reign_end": -977, "era": "南征荆楚", "desc": "三次南征楚国，溺死于汉水"},
+    {"name": "周穆王", "given_name": "姬满", "reign_start": -977, "reign_end": -922, "era": "西巡天下", "desc": "西巡至昆仑，会见西王母，制《吕刑》"},
+    {"name": "周共王", "given_name": "姬繄扈", "reign_start": -922, "reign_end": -900, "era": "王室渐衰", "desc": "国力开始下滑，诸侯势力渐长"},
+    {"name": "周懿王", "given_name": "姬囏", "reign_start": -900, "reign_end": -892, "era": "王室衰弱", "desc": "王室继续衰落，戎狄侵扰加剧"},
+    {"name": "周孝王", "given_name": "姬辟方", "reign_start": -892, "reign_end": -886, "era": "中兴尝试", "desc": "试图重振王室，封非子于秦邑"},
+    {"name": "周夷王", "given_name": "姬燮", "reign_start": -886, "reign_end": -878, "era": "诸侯离心", "desc": "诸侯多不来朝，王权继续下降"},
+    {"name": "周厉王", "given_name": "姬胡", "reign_start": -878, "reign_end": -828, "era": "国人暴动", "desc": "暴虐专利，被国人驱逐，共和行政"},
+    {"name": "周宣王", "given_name": "姬静", "reign_start": -828, "reign_end": -782, "era": "宣王中兴", "desc": "北伐猃狁，南征荆蛮，短暂复兴"},
+    {"name": "周幽王", "given_name": "姬宫涅", "reign_start": -782, "reign_end": -771, "era": "亡国之君", "desc": "烽火戏诸侯，犬戎破镐京，西周亡"}
+  ],
+  "eight_surnames": ["姬", "姜", "姒", "妫", "嬴", "姞", "妘", "姚"],
+  "unique_rules": {
+    "no_emperor": true,
+    "desc_no_emperor": "西周无'皇帝'概念——权力巅峰为取代周天子或诸侯称霸",
+    "profession_locked": true,
+    "desc_profession_locked": "职业一经选择终身不可更改（世卿世禄制）",
+    "same_surname_marriage_ban": true,
+    "desc_marriage_ban": "同姓不婚——姬姓不可娶姬姓，违者子孙被视为非法",
+    "well_field_system": true,
+    "desc_well_field": "井田制——八家各耕私田，共耕公田"
+  }
+}

@@ -1,0 +1,569 @@
+{
+  "dynasty": "western_zhou",
+  "events": [
+    {
+      "id": "wz_shi_court_audience",
+      "type": "identity",
+      "title": "朝中议事",
+      "text": "今日镐京朝堂之上，天子召集群臣商议国事。一位卿大夫注意到了你，投来审视的目光。作为初入仕途的士，这是你在朝堂上第一次被注意到。",
+      "trigger_weight": {
+        "base": 10
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        }
+      ],
+      "choices": [
+        {
+          "text": "挺身而出，陈述对国事的见解",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "int",
+            "outcomes": {
+              "critical": "你的见解鞭辟入里，连天子都微微颔首。那位卿大夫当场表示愿意提拔你。",
+              "success": "你的发言有理有据，几位大夫对你留下了不错的印象。",
+              "partial": "你说了几句但有些紧张——不过至少表明了你关心国事。",
+              "failure": "你的发言被老臣们嗤之以鼻：'黄口小儿，不知天高地厚。'"
+            }
+          },
+          "effects": {
+            "critical": "reputation+10, ambition+2",
+            "success": "reputation+3",
+            "partial": "reputation+1",
+            "failure": "reputation-2"
+          }
+        },
+        {
+          "text": "谨慎旁听，默默学习朝堂之礼",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "vir",
+            "outcomes": {
+              "critical": "你的谦逊被一位老大夫看在眼里。他散朝后叫住你，传授了你一些为官之道。",
+              "success": "你学到了不少朝堂规矩，为日后的仕途打下了基础。",
+              "partial": "你努力听着，但朝堂上许多暗语你听不太懂。",
+              "failure": "你在角落站得太久，被侍卫当作闲杂人等请了出去。"
+            }
+          },
+          "effects": {
+            "critical": "skill_礼法:1, reputation+3",
+            "success": "reputation+1",
+            "partial": "",
+            "failure": "reputation-1"
+          }
+        },
+        {
+          "text": "借机与身旁的同僚攀谈，建立人脉",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "cha",
+            "outcomes": {
+              "critical": "你结识了一位来自鲁国的年轻士人——你们相见恨晚，约定日后互相扶持。",
+              "success": "你和几位同僚交换了姓名，算是混了个脸熟。",
+              "partial": "你试着攀谈但对方似乎对你不太感兴趣。",
+              "failure": "你搭话的对象原来是一名密探——你无意中说错了一句话，惹上了麻烦。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+5, ambition+1",
+            "success": "reputation+2",
+            "partial": "",
+            "failure": "reputation-3, ambition-1"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_shi_martial_test",
+      "type": "identity",
+      "title": "军中比武",
+      "text": "镐京城外的演武场上，正在进行一年一度的军中比武。作为士，你被要求参加射箭和驾车两项考核。围观者众多，胜者将获得丰厚的赏赐和晋升机会。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        },
+        {
+          "type": "min_age",
+          "value": 18
+        }
+      ],
+      "choices": [
+        {
+          "text": "全力以赴，争取第一名",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "str",
+            "outcomes": {
+              "critical": "你的箭无虚发，驾车动作行云流水——全场为之喝彩！军中将佐当场表示要招募你。",
+              "success": "你取得了不错的成绩，排名前列。虽然没有夺冠，但足以让人记住你的名字。",
+              "partial": "你拼尽全力但成绩平平——至少没有丢脸。",
+              "failure": "你在驾车时翻倒了战车，引得全场哄笑。短期内你不想再出现在演武场了。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+10, skill_射御:2, wealth+30, ambition+2",
+            "success": "reputation+3, skill_射御:1",
+            "partial": "reputation+1",
+            "failure": "reputation-5, health-5"
+          }
+        },
+        {
+          "text": "量力而行，稳定发挥即可",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "con",
+            "outcomes": {
+              "critical": "你稳健的表现反而引起了裁判的注意——'此子不骄不躁，可造之材。'",
+              "success": "你完成了所有考核，成绩中规中矩。",
+              "partial": "你在射箭环节脱靶了几次，但驾车还算稳健。",
+              "failure": "你过于保守，被其他参赛者远远甩在后面。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+5, skill_射御:1",
+            "success": "reputation+1",
+            "partial": "",
+            "failure": "reputation-2"
+          }
+        },
+        {
+          "text": "主动放弃比武，在场下观察学习",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "int",
+            "outcomes": {
+              "critical": "你在场下仔细观察各路高手的技艺，悟出了不少射御的窍门。",
+              "success": "看了一天的比武，你对军事技能有了更深的了解。",
+              "partial": "你看得津津有味，但没学到太多实际东西。",
+              "failure": "有人认出你临阵退缩，在背后议论你胆小怕事。"
+            }
+          },
+          "effects": {
+            "critical": "skill_射御:1, skill_兵法:1",
+            "success": "skill_射御:1",
+            "partial": "",
+            "failure": "reputation-3"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
+    },
+    {
+      "id": "wz_shi_ritual_ceremony",
+      "type": "identity",
+      "title": "宗庙祭祀",
+      "text": "今日是周王室在岐山举行的重要祭祀典礼。作为士，你有幸参与其中。青铜礼器排列整齐，编钟奏响庄严肃穆的雅乐。这是一个展示你对礼法理解的重要场合。",
+      "trigger_weight": {
+        "base": 7
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        }
+      ],
+      "choices": [
+        {
+          "text": "虔诚参与，严格遵守礼制流程",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "vir",
+            "outcomes": {
+              "critical": "你对礼制的精准把握令在场的卿大夫们赞叹不已。周公的后人甚至主动与你交谈。",
+              "success": "你的一举一动都符合礼制要求，没有人能挑出毛病。",
+              "partial": "你大体上跟上了流程，但有一两个细节搞错了——好在没人注意到。",
+              "failure": "你在重要的祭祀环节行错了礼——这在西周可是大不敬。你被当场训斥。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+8, skill_礼法:2",
+            "success": "reputation+3, skill_礼法:1",
+            "partial": "reputation+1",
+            "failure": "reputation-5"
+          }
+        },
+        {
+          "text": "趁祭祀间隙与各方贵族交流",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "cha",
+            "outcomes": {
+              "critical": "你在祭祀后的宴会上结识了一位来自齐国的公子——他很欣赏你的谈吐。",
+              "success": "你和几位贵族建立了初步的交情。",
+              "partial": "你试图融入贵族的谈话圈子，但他们对你的话题不太感兴趣。",
+              "failure": "你在祭祀场合高谈阔论，被认为是不敬之举。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+5, ambition+1",
+            "success": "reputation+2",
+            "partial": "",
+            "failure": "reputation-4"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_shi_market_dispute",
+      "type": "random",
+      "title": "市井纷争",
+      "text": "你在镐京的市集上遇到了一场争执：一个商人指责一名游侠偷了他的货物，游侠则声称商人讹诈。围观的人群越聚越多，一场冲突似乎不可避免。",
+      "trigger_weight": {
+        "base": 12
+      },
+      "prerequisites": [],
+      "choices": [
+        {
+          "text": "以士的身份出面调解",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "cha",
+            "outcomes": {
+              "critical": "你三言两语就理清了是非——原来是一个小偷栽赃给游侠。你抓住了真正的小偷，赢得满堂喝彩。",
+              "success": "你成功平息了争执，商人和游侠都对你表示感谢。",
+              "partial": "你调解了半天，双方虽然不再争吵但也都不太满意。",
+              "failure": "你的调解反而激化了矛盾——双方都觉得你在偏袒对方。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+8, wealth+10",
+            "success": "reputation+3",
+            "partial": "",
+            "failure": "reputation-2"
+          }
+        },
+        {
+          "text": "站在弱者一边，教训无礼的商人",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "str",
+            "outcomes": {
+              "critical": "你展示武力震慑了围观的歹人。游侠对你感激涕零，愿意为你效力。",
+              "success": "商人见你不好惹，悻悻离去。",
+              "partial": "你把场面控制住了但留下了隐患——商人扬言要报复。",
+              "failure": "动手中你不慎伤了一个无辜的旁观者，麻烦大了。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+5, ambition+1",
+            "success": "reputation+1",
+            "partial": "",
+            "failure": "reputation-5, health-3"
+          }
+        },
+        {
+          "text": "不插手闲事，继续采购",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "luk",
+            "outcomes": {
+              "critical": "你刚转身离开，就在另一个摊位发现了一件被低估的青铜器——低价买下。",
+              "success": "你顺利买到了需要的东西。",
+              "partial": "你什么都没买到，市集因为斗殴被官府暂时关闭了。",
+              "failure": "混乱中你的钱袋被人趁乱偷走了。"
+            }
+          },
+          "effects": {
+            "critical": "wealth+20",
+            "success": "",
+            "partial": "",
+            "failure": "wealth-15"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_shi_patron_visit",
+      "type": "identity",
+      "title": "贵人召见",
+      "text": "你收到消息——一位卿大夫想见你。他是朝中有分量的人物，据说正在物色有能力的士人做自己的家臣。这是一个难得的晋升机会，但也意味着你需要离开目前的安稳环境。",
+      "trigger_weight": {
+        "base": 6
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        },
+        {
+          "type": "min_reputation",
+          "value": 10
+        }
+      ],
+      "choices": [
+        {
+          "text": "精心准备，盛装前往拜见",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "cha",
+            "outcomes": {
+              "critical": "你不仅打动了这位卿大夫，还见到了他的女儿——一段姻缘似乎在悄然展开。",
+              "success": "卿大夫对你的表现很满意，收你做了门客。",
+              "partial": "你被录用了，但只是做最基础的工作——离核心权力还有很远。",
+              "failure": "你在交谈中说错了话，惹恼了卿大夫。他让你'回去多读几年书'。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+10, ambition+4, wealth+20",
+            "success": "reputation+5, ambition+2",
+            "partial": "reputation+1",
+            "failure": "reputation-3, ambition-1"
+          }
+        },
+        {
+          "text": "婉拒邀请，暂不投靠任何人",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "vir",
+            "outcomes": {
+              "critical": "你独立不倚的态度反而引起了另一位更高位大夫的注意——'此人不可小觑'。",
+              "success": "你礼貌地谢绝了，保持了独立。",
+              "partial": "卿大夫虽然表面上不在意，但心里记住了你的拒绝。",
+              "failure": "你拒绝的方式太生硬——这位卿大夫觉得自己被冒犯了。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+5, ambition+1",
+            "success": "",
+            "partial": "",
+            "failure": "reputation-3"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_shi_zouyan_meeting",
+      "type": "random",
+      "title": "乡饮酒礼",
+      "text": "按照周礼，乡中每年要举行乡饮酒礼——这是士人之间最重要的社交场合。今年轮到你所在的地方举办。席间觥筹交错，大家谈论着天下大事和各自的抱负。",
+      "trigger_weight": {
+        "base": 9
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        }
+      ],
+      "choices": [
+        {
+          "text": "畅谈天下大势，展示抱负",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "int",
+            "outcomes": {
+              "critical": "你的真知灼见令满座皆惊。有人记下了你的名字，传到了诸侯耳中。",
+              "success": "你的发言得到了几位同僚的认同。",
+              "partial": "你说的话虽然有道理，但在这个场合显得有点不合时宜。",
+              "failure": "你酒后失言，说了些不该说的话——希望没人会告密。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+8, ambition+1",
+            "success": "reputation+3, ambition+1",
+            "partial": "",
+            "failure": "reputation-4, ambition-1"
+          }
+        },
+        {
+          "text": "聆听他人之言，结交朋友",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "cha",
+            "outcomes": {
+              "critical": "你结交了三位志同道合的士人朋友——日后你们可以互相扶持。",
+              "success": "你认识了几位新朋友，人脉得到了扩展。",
+              "partial": "大家对你客客气气但保持着距离。",
+              "failure": "你试图融入但显得格格不入——也许你需要提升一下谈吐。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+5, ambition+2",
+            "success": "reputation+2",
+            "partial": "",
+            "failure": "reputation-1"
+          }
+        },
+        {
+          "text": "借酒消愁，放松心情",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "con",
+            "outcomes": {
+              "critical": "微醺之中你灵感迸发——想通了一个困扰已久的问题。",
+              "success": "难得的放松让你身心舒畅。",
+              "partial": "你喝得有点多——第二天头疼欲裂。",
+              "failure": "你喝得酩酊大醉，丑态百出——这件事会成为镐京士人圈的笑谈。"
+            }
+          },
+          "effects": {
+            "critical": "health+5, ambition+1",
+            "success": "health+2",
+            "partial": "health-2",
+            "failure": "reputation-5, health-3"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_shi_crisis_choice",
+      "type": "identity",
+      "title": "两难抉择",
+      "text": "你得知了一个秘密——你的一位同僚暗中与犬戎有勾结。如果揭发他，你可能会得罪他背后的势力；如果保持沉默，国家利益可能受损。与此同时，这位同僚似乎察觉到了什么，主动来找你'谈心'。",
+      "trigger_weight": {
+        "base": 5
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        },
+        {
+          "type": "min_reputation",
+          "value": 15
+        }
+      ],
+      "choices": [
+        {
+          "text": "向卿大夫密报此事",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "vir",
+            "outcomes": {
+              "critical": "你的举报得到了证实——天子亲自嘉奖你的忠诚。",
+              "success": "卿大夫重视了你的情报，开始暗中调查。",
+              "partial": "卿大夫收下了你的密报但似乎不太相信——也许你缺乏证据。",
+              "failure": "消息走漏了——那位同僚和他的后台开始对你进行报复。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+15, ambition+2",
+            "success": "reputation+5",
+            "partial": "",
+            "failure": "reputation-8, health-10"
+          }
+        },
+        {
+          "text": "直接与那位同僚对质",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "str",
+            "outcomes": {
+              "critical": "你义正词严的质问让他羞愧难当——他当场认罪并愿意将功赎罪。",
+              "success": "他承认了部分事实，但声称自己是被胁迫的。",
+              "partial": "他矢口否认，但至少知道了你不是好糊弄的。",
+              "failure": "对质演变成了肢体冲突——你受了伤。而他在朝中的朋友开始散布你的谣言。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+10, ambition+2",
+            "success": "reputation+3",
+            "partial": "",
+            "failure": "health-8, reputation-5"
+          }
+        },
+        {
+          "text": "假装不知情，暗中收集证据",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "int",
+            "outcomes": {
+              "critical": "你花了数月暗中调查，不仅掌握了确凿证据，还发现了更大的阴谋网络。",
+              "success": "你收集到了一些有用的情报，但还需要更多时间。",
+              "partial": "你的暗中活动引起了他的警觉——他开始防备你了。",
+              "failure": "他在你之前采取了行动——你被栽赃成了通敌者。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+12, ambition+1",
+            "success": "reputation+3, ambition+1",
+            "partial": "",
+            "failure": "reputation-10, ambition-2"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
+    },
+    {
+      "id": "wz_shi_weather_famine",
+      "type": "random",
+      "title": "天灾之年",
+      "text": "今年大旱，渭水几近干涸。农田颗粒无收，粮价飞涨，饥民开始聚集在镐京城外。作为士，你有责任为国家分忧——但你能做的似乎有限。",
+      "trigger_weight": {
+        "base": 4
+      },
+      "prerequisites": [],
+      "choices": [
+        {
+          "text": "开仓放粮，救济饥民",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "vir",
+            "outcomes": {
+              "critical": "你的义举被广为传颂——'仁义之士'的美名不胫而走。民众自发为你建碑。",
+              "success": "你救活了不少饥民。虽然自己损失了一些财富，但赢得了人心。",
+              "partial": "你放了一些粮食，但杯水车薪——情况依然严峻。",
+              "failure": "放粮引起了哄抢——你的粮仓被洗劫一空。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+15, wealth-30",
+            "success": "reputation+8, wealth-20",
+            "partial": "reputation+3, wealth-10",
+            "failure": "reputation-2, wealth-40"
+          }
+        },
+        {
+          "text": "向朝廷上书请求赈灾",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "int",
+            "outcomes": {
+              "critical": "你的上书条理清晰、切实可行——朝廷采纳了你的建议并委任你负责赈灾。",
+              "success": "朝廷同意拨粮赈灾——虽然效率不高但总算有了行动。",
+              "partial": "你的上书被搁置了——朝中大臣们在忙着争权夺利。",
+              "failure": "你的上书被认为是在指责朝廷施政不力——你被训斥了一顿。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+12, ambition+2",
+            "success": "reputation+5",
+            "partial": "",
+            "failure": "reputation-3, ambition-1"
+          }
+        },
+        {
+          "text": "趁着粮价高涨，囤积居奇",
+          "resolution": {
+            "dice": "2d6",
+            "attr": "luk",
+            "outcomes": {
+              "critical": "你在粮价最高点抛售——赚了一大笔。但你的良心在隐隐作痛。",
+              "success": "你从粮价波动中小赚了一笔。",
+              "partial": "你刚买入粮食，朝廷就下令平抑粮价——你的投资打了水漂。",
+              "failure": "饥民发现了你囤积的粮食——他们砸开你的仓库哄抢。你人财两空。"
+            }
+          },
+          "effects": {
+            "critical": "wealth+50, reputation-5",
+            "success": "wealth+20",
+            "partial": "wealth-15",
+            "failure": "wealth-30, reputation-10, health-5"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
+    }
+  ]
+}

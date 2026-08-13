@@ -1,0 +1,45 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="华夏模拟人生"
+config/description="2D策略角色扮演游戏 - 从西周士族开始你的华夏人生"
+config/version="0.1.0"
+run/main_scene="res://scenes/main_menu.tscn"
+config/features=PackedStringArray("4.3")
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameState="*res://scripts/core/game_state.gd"
+DiceSystem="*res://scripts/core/dice_system.gd"
+TimeManager="*res://scripts/core/time_manager.gd"
+DynastyManager="*res://scripts/core/dynasty_manager.gd"
+CharacterManager="*res://scripts/core/character_manager.gd"
+EventManager="*res://scripts/core/event_manager.gd"
+VisualConfig="*res://scripts/core/visual_config.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/mode=2
+window/stretch/mode="canvas_items"
+
+[input]
+
+ui_accept.space=true
+ui_cancel.escape=true
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
