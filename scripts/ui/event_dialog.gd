@@ -40,6 +40,12 @@ func _ready() -> void:
 		_illustration_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		_illustration_rect.custom_minimum_size = Vector2(600, 280)
 		_illustration_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		# 添加轻动效
+		_illustration_rect.scale = Vector2(0.5, 0.5)
+		_illustration_rect.fade_out(0.5) # 淡出效果，持续0.5秒
+		_illustration_rect.scale = Vector2(1, 1) # 恢复原始大小
+
 		# 插入到 VBoxContainer 的标题和正文之间
 		var vbox: VBoxContainer = $Panel/VBoxContainer
 		var text_idx := text_label.get_index()
@@ -55,6 +61,7 @@ func _ready() -> void:
 		btn.custom_minimum_size = Vector2(600, 40)
 		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		VisualConfig.style_button(btn, 14)
+
 		var idx = i
 		btn.pressed.connect(_on_choice_made.bind(idx))
 		choices_container.add_child(btn)
@@ -62,6 +69,7 @@ func _ready() -> void:
 func _on_choice_made(choice_index: int) -> void:
 	if _resolved:
 		return
+
 	_resolved = true
 
 	# 禁用所有选择按钮
@@ -78,27 +86,31 @@ func _on_choice_made(choice_index: int) -> void:
 
 	# 显示结果
 	var roll = result.result
-	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
-	result_label.text += "掷骰：2d6 = %d | 属性加值：%d | 最终：%d\n" % [
-		roll.roll_value, roll.attr_bonus, roll.final_value
-	]
-	result_label.text += "[color=#ffcc00]%s[/color]\n\n" % roll.tier_name
+	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]
+	"
+	result_label.text += "掷骰：2d6 = %d | 属性加值：%d | 最终：%d\n" % [roll.roll_value, roll.attr_bonus, roll.final_value]
+	result_label.text += "[color=#ffcc00]%s[/color]" % roll.tier_name
+
 	result_label.text += result.description
 
 	# 显示效果
 	if not result.effects.is_empty():
-		result_label.text += "\n\n[color=#80ff80]效果：[/color]"
-		for eff in result.effects:
-			var type = eff.get("type", "")
-			var value = eff.get("value", 0)
-			if type == "skill":
-				result_label.text += "\n  · 习得技能：%s Lv%d" % [eff.get("name", ""), value]
-			elif value > 0:
-				result_label.text += "\n  · %s +%d" % [type, value]
-			elif value < 0:
-				result_label.text += "\n  · %s %d" % [type, value]
+		result_label.text +=
 
-	close_button.visible = true
+[color=#80ff80]效果：[/color]
+	"
+	for eff in result.effects:
+		var type = eff.get("type", "")
+		var value = eff.get("value", 0)
+		if type == "skill":
+			result_label.text +=
+				\n  · %s Lv%d" % [eff.get("name", ""), value]
+		elif value > 0:
+			result_label.text +=
+				\n  · %s +%d" % [type, value]
+		elif value < 0:
+			result_label.text +=
+				\n  · %s %d" % [type, value]
 
 func _on_close() -> void:
 	queue_free()
@@ -118,23 +130,27 @@ func show_action_result(action_title: String, body_text: String, dice_result: Di
 
 	# 骰子结果
 	var roll = dice_result
-	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
-	result_label.text += "掷骰：2d6 = %d | 属性加值：%+d | 最终：%d\n" % [
-		roll.get("roll_value", 0), roll.get("attr_bonus", 0), roll.get("final_value", 0)
-	]
+	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]
+	"
+	result_label.text += "掷骰：2d6 = %d | 属性加值：%+d | 最终：%d
+" % [roll.get("roll_value", 0), roll.get("attr_bonus", 0), roll.get("final_value", 0)]
 	result_label.text += "[color=#ffcc00]%s[/color]" % roll.get("tier_name", "")
 
 	# 效果
 	if not effects.is_empty():
-		result_label.text += "\n\n[color=#80ff80]效果：[/color]"
-		for eff in effects:
-			var eff_type = eff.get("type", "")
-			var value = eff.get("value", 0)
-			if eff_type == "skill":
-				result_label.text += "\n  · %s Lv%d" % [eff.get("name", ""), value]
-			elif value > 0:
-				result_label.text += "\n  · %s +%d" % [eff_type, value]
-			elif value < 0:
-				result_label.text += "\n  · %s %d" % [eff_type, value]
+		result_label.text +=
 
-	close_button.visible = true
+[color=#80ff80]效果：[/color]
+	"
+	for eff in effects:
+		var eff_type = eff.get("type", "")
+		var value = eff.get("value", 0)
+		if eff_type == "skill":
+			result_label.text +=
+				\n  · %s Lv%d" % [eff.get("name", ""), value]
+		elif value > 0:
+			result_label.text +=
+				\n  · %s +%d" % [eff_type, value]
+		elif value < 0:
+			result_label.text +=
+				\n  · %s %d" % [eff_type, value]
