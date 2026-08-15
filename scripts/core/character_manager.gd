@@ -845,9 +845,17 @@ func propose_marriage(character: Dictionary, spouse_surname: String, spouse_clan
 				ying["last_affair_year"] = -9999
 				GameState.family_data.ying_qie.append(ying)
 			ying_msg = " 随嫁媵妾%d人——皆%s姓宗女。" % [ying_count, spouse_surname]
+	# 娶妻随嫁——陪房丫鬟（通房）1-2人（4.1）
+	var dowry_msg = ""
+	if not GameState.family_data.has("tongfangs"):
+		GameState.family_data["tongfangs"] = []
+	var dowry_count = 1 + randi_range(0, 1)
+	for _dt in range(dowry_count):
+		GameState.family_data.tongfangs.append(_create_dowry_tongfang(character, spouse))
+	dowry_msg = " 陪嫁丫鬟%d人随妻入府。" % dowry_count
 	return {
 		"success": true, "spouse": spouse, "dowry_paid": dowry, "bride_wealth": bride_wealth,
-		"message": "你与%s%s·%s氏结为夫妻！嫁妆 %d 石。%s" % [spouse_surname, spouse.name, spouse.clan, bride_wealth, ying_msg]
+		"message": "你与%s%s·%s氏结为夫妻！嫁妆 %d 石。%s%s" % [spouse_surname, spouse.name, spouse.clan, bride_wealth, ying_msg, dowry_msg]
 	}
 
 func propose_marriage_parents(character: Dictionary, spouse_surname: String, spouse_clan: String) -> Dictionary:
@@ -879,10 +887,50 @@ func propose_marriage_parents(character: Dictionary, spouse_surname: String, spo
 				ying["last_affair_year"] = -9999
 				GameState.family_data.ying_qie.append(ying)
 			ying_msg = " 随嫁媵妾%d人——皆%s姓宗女。" % [ying_count, spouse_surname]
+	# 娶妻随嫁——陪房丫鬟（通房）1-2人（4.1）
+	var dowry_msg = ""
+	if not GameState.family_data.has("tongfangs"):
+		GameState.family_data["tongfangs"] = []
+	var dowry_count = 1 + randi_range(0, 1)
+	for _dt in range(dowry_count):
+		GameState.family_data.tongfangs.append(_create_dowry_tongfang(character, spouse))
+	dowry_msg = " 陪嫁丫鬟%d人随妻入府。" % dowry_count
 	return {
 		"success": true, "spouse": spouse, "dowry_paid": 0, "bride_wealth": bride_wealth,
-		"message": "父母之命——你与%s%s·%s氏结为夫妻！嫁妆 %d 石。%s" % [spouse_surname, spouse.name, spouse.clan, bride_wealth, ying_msg]
+		"message": "父母之命——你与%s%s·%s氏结为夫妻！嫁妆 %d 石。%s%s" % [spouse_surname, spouse.name, spouse.clan, bride_wealth, ying_msg, dowry_msg]
 	}
+
+func _create_dowry_tongfang(character: Dictionary, spouse: Dictionary) -> Dictionary:
+	"""娶妻随嫁的贴身丫鬟→通房。出身妻族，忠诚60-75，标记 is_dowry + follows_wife。"""
+	var tf = generate_spouse(spouse.get("surname", ""), spouse.get("clan", "侍"), max(14, spouse.get("age", 16) - randi_range(-1, 4)))
+	tf["married_year"] = GameState.current_year
+	tf["is_pregnant"] = false
+	tf["pregnancy_remaining"] = 0
+	tf["loyalty"] = clampi(60 + randi_range(0, 15) + _personality_loyalty_bias(tf), 0, 100)
+	tf["last_affair_year"] = -9999
+	tf["health"] = 65
+	tf["intimacy"] = 50
+	tf["is_dowry"] = true
+	tf["follows_wife"] = spouse.get("name", "")
+	return tf
+
+func _dispose_dowry_tongfangs(character: Dictionary, wife_name: String) -> Array:
+	"""妻亡/和离后处置陪嫁通房：50% 留府转正式通房，50% 遣散。返回通知列表。"""
+	var notices: Array = []
+	var tongfangs = GameState.family_data.get("tongfangs", [])
+	var kept: Array = []
+	for tf in tongfangs:
+		if tf.get("is_dowry", false) and tf.get("follows_wife", "") == wife_name:
+			if randf() < 0.5:
+				tf["is_dowry"] = false
+				notices.append("☀ 妻亡后陪房丫鬟%s留府，转为正式通房。" % tf.get("name", ""))
+			else:
+				notices.append("☀ 妻亡后陪房丫鬟%s被遣散归家。" % tf.get("name", ""))
+				continue
+		kept.append(tf)
+	if kept.size() != tongfangs.size():
+		GameState.family_data["tongfangs"] = kept
+	return notices
 
 # ============================================================
 # 子女系统
@@ -1464,13 +1512,14 @@ func take_tongfang(character: Dictionary, surname: String, clan: String, cost: i
 	tf["married_year"] = GameState.current_year
 	tf["is_pregnant"] = false
 	tf["pregnancy_remaining"] = 0
-	tf["loyalty"] = clampi(60 + randi_range(0, 20) + _personality_loyalty_bias(tf), 0, 100)
+	tf["loyalty"] = clampi(60 + randi_range(0, 15) + _personality_loyalty_bias(tf), 0, 100)
 	tf["last_affair_year"] = -9999
+	tf["is_dowry"] = false
 	if not GameState.family_data.has("tongfangs"):
 		GameState.family_data["tongfangs"] = []
 	GameState.family_data.tongfangs.append(tf)
 	return {"success": true, "tongfang": tf, "cost": cost,
-		"message": "收%s%s·%s氏为通房丫头——花费 %d 石。" % [surname, tf.name, tf.clan, cost]}
+		"message": "侍女%s·%s转为通房丫头——花费 %d 石。" % [surname, tf.name, cost]}
 
 func can_take_furen(character: Dictionary) -> Dictionary:
 	"""天子专属——纳夫人。返回 {can, reason, max_count, cost, current}"""
@@ -2616,9 +2665,13 @@ func update_parents_aging() -> Dictionary:
 		var spouse = char.relationships.spouse
 		spouse["age"] = _compute_age(spouse)
 		if spouse.age > 55 and randf() < 0.06:
+			var wife_name = spouse.get("name", "")
 			spouse["is_alive"] = false
 			spouse["is_pregnant"] = false
 			notices.append("☠ 配偶%s%s·%s氏去世，享年%d岁。" % [spouse.get("surname", ""), spouse.get("name", ""), spouse.get("clan", ""), spouse.age])
+			# 陪嫁通房随妻：妻亡后 50% 留府转正式通房 / 50% 遣散（4.2）
+			for dt in _dispose_dowry_tongfangs(char, wife_name):
+				notices.append(dt)
 			# 死妻让位——清空配偶位，玩家可再娶（3.8）
 			char.relationships.spouse = {}
 	# 侧室老化（妾室/夫人/媵妾/通房）
