@@ -1530,7 +1530,7 @@ func _generate_affair_candidates(char: Dictionary) -> Array:
 	surnames.erase(char.get("surname", ""))
 	var male_names = ["虎", "龙", "昆", "昊", "晟", "青", "飞", "武"]
 	var female_names = ["姜", "妃", "妍", "韵", "紫", "娜", "淑", "婉", "薇", "萍"]
-	var npc_descs = ["邻家少妇", "市集商妇", "贵族女子", "寒门秀才", "外乡旅人", "宫中侍女", "落魄士人"]
+	var npc_descs = ["邻家少妇", "采桑女", "贵族女子", "公卿家眷", "边邑戍卒之妻", "巫祝之女", "外乡旅人", "宫中侍女", "落魄士人"]
 	for _i in range(pool_size):
 		var s = surnames[randi_range(0, surnames.size() - 1)]
 		var names_pool = female_names if char.get("gender", "male") == "male" else male_names
