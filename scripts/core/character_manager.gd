@@ -467,6 +467,14 @@ func grant_promotion(character: Dictionary) -> Dictionary:
 		else:
 			# 回乡就封
 			character["fief"] = birth
+	# 受封诸侯——初始爵位（军功≥3或声望≥120→子爵，否则男爵；公仅特殊事件）
+	if character.social_level == 5 and character.get("noble_level", 0) == 0:
+		if character.get("military_merit", 0) >= 3 or character.derived.get("reputation", 0) >= 120:
+			character["noble_title"] = "子"
+			character["noble_level"] = 2
+		else:
+			character["noble_title"] = "男"
+			character["noble_level"] = 1
 
 	# 晋升——授予初始家兵/更新上限
 	if character.social_level >= 4 and old_level < 4:
@@ -615,6 +623,29 @@ func _do_enfeoffment(character: Dictionary) -> Dictionary:
 		return {"success": false, "message": "王命未许——天子斟酌再三，封疆之事暂缓（成功率 %.0f%%）。" % chance}
 	var g = grant_promotion(character)
 	return {"success": true, "message": "册命大典——天子裂土封疆，%s" % g.get("message", "")}
+
+func advance_noble_title(character: Dictionary) -> Dictionary:
+	"""爵位线：王宠≥40+声望≥80 朝觐大典掷骰晋爵（男→子→伯→侯，公仅特殊事件），王宠-20"""
+	if character.get("noble_level", 0) >= 4:
+		return {"success": false, "message": "你已封侯，公爵唯待天子殊恩。"}
+	if character.get("king_favor", 20) < 40:
+		return {"success": false, "message": "王宠不足（需≥40），天子尚无加封之意。"}
+	if character.derived.get("reputation", 0) < 80:
+		return {"success": false, "message": "声望不足（需≥80），晋爵恐遭物议。"}
+	modify_king_favor(character, -20)
+	var bonus = DiceSystem.attr_to_bonus(character.attributes.get("cha", 10))
+	var roll: Dictionary = DiceSystem.roll_dice("2d6", bonus, 0)
+	if roll.get("tier", 9) > 1:
+		return {"success": false, "message": "朝觐大典——王命未允，晋爵之请暂缓。王宠-20。"}
+	var new_level = character.get("noble_level", 0) + 1
+	var title := "男"
+	match new_level:
+		2: title = "子"
+		3: title = "伯"
+		4: title = "侯"
+	character["noble_level"] = new_level
+	character["noble_title"] = title
+	return {"success": true, "message": "朝觐大典——天子册命你为%s爵！王宠-20。" % title, "noble_title": title}
 
 func demote_character(character: Dictionary, target_level: int = 2) -> Dictionary:
 	var old_level: int = character.social_level

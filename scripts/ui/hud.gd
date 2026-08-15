@@ -1031,6 +1031,10 @@ func _refresh_display() -> void:
 	char_profession_label.text = "职业：%s" % char.get("profession", "")
 	var pos_text = char.get("official_position", "")
 	var id_parts = "身份：%s（Lv%d）" % [CharacterManager.get_social_display(char), char.social_level]
+	var noble_disp = char.get("noble_title", "")
+	if noble_disp == "":
+		noble_disp = "未列侯"
+	id_parts += " | 爵位：%s" % noble_disp
 	if not pos_text.is_empty():
 		id_parts += " | 官职：%s" % pos_text
 	var fief_text = char.get("fief", "")
@@ -1067,13 +1071,9 @@ func _refresh_display() -> void:
 				alive.append("%s%s(%d岁)" % [c.surname, c.name, ca])
 		if not alive.is_empty():
 			child_text = " | 子女：" + ", ".join(alive)
-	var noble_disp = char.get("noble_title", "")
-	if noble_disp == "":
-		noble_disp = "未列侯"
-	char_clan_label.text = "民族：%s | 姓：%s%s%s\n家声：%d · 爵位：%s · %s" % [
+	char_clan_label.text = "民族：%s | 姓：%s%s%s\n家声：%d · %s" % [
 		char.ethnicity, char.surname, married_text, child_text,
 		GameState.family_data.get("reputation", 0),
-		noble_disp,
 		_game_next_event_text()
 	]
 
@@ -4038,7 +4038,7 @@ func _show_promotion_gate() -> void:
 	var char = GameState.current_character
 	if char.is_empty():
 		return
-	var popup := _make_popup("PromotionGate", 250, 310)
+	var popup := _make_popup("PromotionGate", 250, 345)
 	var vbox := _popup_vbox(popup)
 	_add_popup_title(vbox, "🗝 晋升之门")
 
@@ -4109,6 +4109,36 @@ func _show_promotion_gate() -> void:
 			_refresh_display()
 		)
 		vbox.add_child(feng_btn)
+
+	# ── 爵位线 ──
+	var cur_nlvl = char.get("noble_level", 0)
+	var cur_noble = char.get("noble_title", "")
+	var next_noble := "男爵（首授）"
+	match cur_nlvl:
+		1: next_noble = "子爵"
+		2: next_noble = "伯爵"
+		3: next_noble = "侯爵"
+		4: next_noble = "公爵（唯天命）"
+	var noble_label := Label.new()
+	noble_label.text = "👑 爵位：%s → 晋 %s\n    王宠 %d/40：%s   声望 %d/80：%s" % [
+		("未列侯" if cur_noble == "" else cur_noble + "爵"),
+		next_noble,
+		char.get("king_favor", 20), "✓" if char.get("king_favor", 20) >= 40 else "✗",
+		char.derived.get("reputation", 0), "✓" if char.derived.get("reputation", 0) >= 80 else "✗"
+	]
+	noble_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(noble_label)
+	if cur_nlvl < 4:
+		var noble_btn := Button.new()
+		noble_btn.text = "👑 朝觐晋爵（耗王宠20）"
+		noble_btn.custom_minimum_size = Vector2(0, 30)
+		noble_btn.pressed.connect(func():
+			var r = CharacterManager.advance_noble_title(char)
+			_add_log("👑 " + r.get("message", ""))
+			popup.queue_free()
+			_refresh_display()
+		)
+		vbox.add_child(noble_btn)
 
 	# ── 历史事件 ──
 	var ev_label := Label.new()
