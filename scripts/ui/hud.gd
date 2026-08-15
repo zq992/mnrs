@@ -1410,6 +1410,15 @@ func _handle_father_inheritance(funeral: Dictionary) -> void:
 		var dad_prof = father.get("profession", "")
 		if dad_prof != "":
 			char.profession = dad_prof
+		# 父为诸侯时承袭封地/爵位（防丢封地）
+		if dad_level >= 5:
+			var dad_fief = father.get("fief", "")
+			if not dad_fief.is_empty():
+				char["fief"] = dad_fief
+			var dad_noble = father.get("noble_title", "")
+			if not dad_noble.is_empty():
+				char["noble_title"] = dad_noble
+				char["noble_level"] = father.get("noble_level", 1)
 		_add_log("👑 继承父亲爵位——擢升为%s，承袭职务%s！" % [char.social_class, dad_prof])
 		_add_log("🏛 族人推举你继任家主之位，宗族势力归心。")
 	elif dad_level == char.social_level:
@@ -3850,6 +3859,13 @@ func _on_ambition_fulfilled() -> void:
 # ============================================================
 func _on_power_promote() -> void:
 	var char = GameState.current_character
+	# 资历门槛：本等级任职未满规定年限，不许请迁（抗刷）
+	var tenure = CharacterManager.get_tenure_years(char)
+	var need = CharacterManager.tenure_requirement(char.social_level)
+	if tenure < need:
+		_add_log("你方就任未满 %d 年（已 %d 年），资历尚浅，不宜贸然请迁。" % [need, tenure])
+		_refresh_display()
+		return
 	var r: Dictionary = CharacterManager.promote_character(char)
 	if r.get("success", false):
 		_add_log("📈 " + r.get("message", ""))
@@ -3866,19 +3882,13 @@ func _on_reputation_promote() -> void:
 	var result := DiceSystem.roll_dice("2d6", bonus, 0)
 	match result.tier:
 		0:
-			CharacterManager.promote_character(char)
-			_add_log("📜 乡老们对你的德行赞不绝口，一致推举你为" + CharacterManager.SOCIAL_CLASSES[char.social_level].display + "！声望+10")
 			CharacterManager.modify_reputation(char, 10)
-			char.profession = CharacterManager.SOCIAL_CLASSES[char.social_level].display
+			_add_log("📜 乡老们对你的德行赞不绝口，声名远播——声望+10。朝廷册命方是晋升之途。")
 			_refresh_display()
-			_show_promotion_celebration()
 		1:
-			CharacterManager.promote_character(char)
-			_add_log("📜 你的声望得到了乡里认可，擢升为" + CharacterManager.SOCIAL_CLASSES[char.social_level].display + "。声望+5")
 			CharacterManager.modify_reputation(char, 5)
-			char.profession = CharacterManager.SOCIAL_CLASSES[char.social_level].display
+			_add_log("📜 你的声望得到了乡里认可——声望+5。唯望朝廷册命，方得升迁。")
 			_refresh_display()
-			_show_promotion_celebration()
 		2:
 			_add_log("📜 乡老们认为你声望尚不足以请迁……还需努力。")
 		3:
@@ -3975,19 +3985,15 @@ func _on_seek_promotion(popup: CanvasLayer) -> void:
 
 	match result.tier:
 		0:
-			CharacterManager.promote_character(char)
-			_add_log("🎉 大成功！" + king.get("name", "周王") + "对你赞赏有加，当场封你为" + CharacterManager.SOCIAL_CLASSES[char.social_level].display + "！声誉+15")
+			CharacterManager.modify_king_favor(char, 15)
 			CharacterManager.modify_reputation(char, 15)
-			char.profession = CharacterManager.SOCIAL_CLASSES[char.social_level].display
+			_add_log("🎉 大成功！" + king.get("name", "周王") + "对你赞赏有加，许你异日恩典——王宠+15，声望+15。")
 			_refresh_display()
-			_show_promotion_celebration()
 		1:
-			CharacterManager.promote_character(char)
-			_add_log("👑 " + king.get("name", "周王") + "认可了你的才干，赐予你" + CharacterManager.SOCIAL_CLASSES[char.social_level].display + "之位。声誉+10")
+			CharacterManager.modify_king_favor(char, 10)
 			CharacterManager.modify_reputation(char, 10)
-			char.profession = CharacterManager.SOCIAL_CLASSES[char.social_level].display
+			_add_log("👑 " + king.get("name", "周王") + "认可了你的才干，言明日后重用——王宠+10，声望+10。")
 			_refresh_display()
-			_show_promotion_celebration()
 		2:
 			_add_log("君王认为你尚需历练，暂不赐爵。声誉+5。日后再来。")
 			CharacterManager.modify_reputation(char, 5)
@@ -4044,21 +4050,15 @@ func _on_plot_execute(popup: CanvasLayer) -> void:
 
 	match result.tier:
 		0:
-			CharacterManager.promote_character(char)
-			_add_log("🌑 暗谋大获成功！你在暗中扳倒了政敌，擢升" + CharacterManager.SOCIAL_CLASSES[char.social_level].display + "！无人知晓真相……声誉+10，野心+15")
-			CharacterManager.modify_reputation(char, 10)
-			CharacterManager.modify_ambition(char, 6)
-			char.profession = CharacterManager.SOCIAL_CLASSES[char.social_level].display
+			CharacterManager.modify_regency_power(char, 20)
+			CharacterManager.modify_ambition(char, 8)
+			_add_log("🌑 暗谋大获成功！你在暗中扳倒政敌，把持朝政——实权+20，野心+8！无人知晓真相……")
 			_refresh_display()
-			_show_promotion_celebration()
 		1:
-			CharacterManager.promote_character(char)
-			_add_log("🌑 暗谋成功。你如愿以偿擢升" + CharacterManager.SOCIAL_CLASSES[char.social_level].display + "，但朝中已有流言……声誉-5，野心+10")
-			CharacterManager.modify_reputation(char, -5)
-			CharacterManager.modify_ambition(char, 4)
-			char.profession = CharacterManager.SOCIAL_CLASSES[char.social_level].display
+			CharacterManager.modify_regency_power(char, 12)
+			CharacterManager.modify_ambition(char, 5)
+			_add_log("🌑 暗谋成功。你逐渐掌控国政机枢——实权+12，野心+5，但朝中已有流言……")
 			_refresh_display()
-			_show_promotion_celebration()
 		2:
 			CharacterManager.demote_character(char, 2)
 			_add_log("💀 阴谋败露！你的暗谋被人告发……念在你过往功劳，免去死罪，贬为庶人！声誉-20，野心归零。")

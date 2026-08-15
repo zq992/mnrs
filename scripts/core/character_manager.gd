@@ -201,6 +201,13 @@ func create_character(options: Dictionary) -> Dictionary:
 		"fief": "",                # 封地——诸侯才有
 		"household_troops": {"步兵": 0, "车兵": 0, "王师": 0},  # 按兵种存储
 		"max_troops": {},          # 从TROOP_LIMITS计算（按兵种）
+		"birth_state": options.get("birth_state", "周王畿"),  # 出生地（修复：此前 options 值被丢弃）
+		"king_favor": {3: 20, 4: 30, 5: 40}.get(options.get("social_level", 3), 10),  # 王宠/王赏识 0-100
+		"military_merit": 0,        # 军功（受封门槛≥3）
+		"regency_power": 0,         # 实权/政治权重 0-100（世卿操控国政）
+		"noble_title": "",          # 爵位（子/男/伯/侯/公）
+		"noble_level": 0,           # 爵位等级 0-5
+		"level_start_year": GameState.current_year,  # 本等级起始年（资历门槛）
 	}
 
 	# 计算衍生属性
@@ -350,6 +357,32 @@ func modify_ambition(character: Dictionary, delta: int) -> void:
 		_: cap = 100  # 天子——天下共主，野心无界
 	character.ambition = clampi(character.ambition + delta, 0, cap)
 	character.derived.ambition = character.ambition
+
+func modify_king_favor(character: Dictionary, delta: int) -> void:
+	"""修改王宠/王赏识 0-100"""
+	character["king_favor"] = clampi(character.get("king_favor", 20) + delta, 0, 100)
+
+func modify_military_merit(character: Dictionary, delta: int) -> void:
+	"""修改军功（不可为负）"""
+	character["military_merit"] = max(0, character.get("military_merit", 0) + delta)
+
+func modify_regency_power(character: Dictionary, delta: int) -> void:
+	"""修改实权/政治权重 0-100（世卿操控国政）"""
+	character["regency_power"] = clampi(character.get("regency_power", 0) + delta, 0, 100)
+
+func get_tenure_years(character: Dictionary) -> int:
+	"""本等级任职年数（资历）"""
+	return max(0, GameState.current_year - character.get("level_start_year", GameState.current_year))
+
+func tenure_requirement(social_level: int) -> int:
+	"""晋升下一级所需任职年数：奴1/庶2/士3/卿5/诸侯8"""
+	match social_level:
+		1: return 1
+		2: return 2
+		3: return 3
+		4: return 5
+		5: return 8
+	return 99
 
 func modify_attribute(character: Dictionary, attr_name: String, delta: int) -> void:
 	character.attributes[attr_name] = clampi(character.attributes.get(attr_name, 10) + delta, 3, 20)
@@ -1725,7 +1758,16 @@ func create_heir_character(character: Dictionary, heir: Dictionary) -> Dictionar
 		"inventory": [], "reputation": int(character.reputation / 3),
 		"wealth": 0, "ambition": 15, "legitimacy": 0,
 		"relationships": {"spouse": null, "children": [], "rivals": [], "allies": []},
-		"status_flags": []
+		"status_flags": [],
+		"official_position": character.get("official_position", ""),  # 承袭官职（修复：此前丢失）
+		"fief": character.get("fief", ""),                            # 承袭封地（修复：此前丢失）
+		"birth_state": character.get("birth_state", "周王畿"),
+		"king_favor": int(character.get("king_favor", 20) / 3),       # 王宠余荫
+		"military_merit": character.get("military_merit", 0),         # 父辈军功
+		"regency_power": 0,
+		"noble_title": character.get("noble_title", ""),              # 承袭爵位
+		"noble_level": character.get("noble_level", 0),
+		"level_start_year": GameState.current_year,
 	}
 	new_char.derived = _calculate_derived(new_char)
 	return new_char
