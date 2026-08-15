@@ -960,7 +960,6 @@ func _on_ask_parents() -> void:
 			tier_name = "失败"
 
 	_add_log("向父母要钱——%s（尝试请求 %d 石）" % [tier_name, amount if amount > 0 else base_amount])
-	_mark_acted("ask_parents")
 
 	if amount > 0:
 		var ask_result = CharacterManager.ask_parents_for_money(char, amount)
@@ -4530,7 +4529,8 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 				if children[i].name == member_data.name and children[i].surname == member_data.surname:
 					child_idx = i
 					break
-			actions.append({"text": "👨‍🏫 教导", "callback": func(): _do_teach_specific_child(member_data), "cooldown": "teach_child_" + str(child_idx)})
+			# 教导：self_gated 取消免费——冷却在选科确认时才打点，打开弹窗后取消不消耗
+			actions.append({"text": "👨‍🏫 教导", "callback": func(): _do_teach_specific_child(member_data), "cooldown": "teach_child_" + str(child_idx), "self_gated": true})
 			actions.append({"text": "🎯 定方向", "callback": func(): _on_set_child_direction(member_data), "cooldown": "set_child_direction", "self_gated": true})
 			# 成年子女婚嫁
 			var child_age: int = GameState.current_year - member_data.get("birth_year", GameState.current_year)
@@ -4879,6 +4879,10 @@ func _show_teach_picker_for_child(child_index: int) -> void:
 		btn.add_theme_stylebox_override("pressed", btn_styles["pressed"])
 		btn.pressed.connect(func():
 			popup.queue_free()
+			# 选科确认入口守门：本季已教导过此子则拒绝（取消免费，打开弹窗不消耗）
+			if not _can_act("teach_child_" + str(child_index)):
+				_add_log("本季已教导过此子，下季再来吧。")
+				return
 			var result := CharacterManager.educate_child(char, child_index, subj)
 			_add_log("👨‍🏫 " + result.message)
 			_mark_acted("teach_child_" + str(child_index))
