@@ -370,6 +370,15 @@ func _can_act(id: String) -> bool:
 func _mark_acted(id: String) -> void:
 	_cooldowns[id] = _season_key()
 
+func _run_family_act(id: String, log: String, cb: Callable) -> void:
+	"""统一家族动作执行器：入口查冷却，执行后打点"""
+	if not id.is_empty() and not _can_act(id):
+		_add_log(log)
+		return
+	cb.call()
+	if not id.is_empty():
+		_mark_acted(id)
+
 # ============================================================
 # 快捷键：空格=推进，1=履职，2=修习（P1-4）
 # 用 _input 在 GUI 消费前拦截；输入框聚焦或弹窗开启时不响应
@@ -951,6 +960,7 @@ func _on_ask_parents() -> void:
 			tier_name = "失败"
 
 	_add_log("向父母要钱——%s（尝试请求 %d 石）" % [tier_name, amount if amount > 0 else base_amount])
+	_mark_acted("ask_parents")
 
 	if amount > 0:
 		var ask_result = CharacterManager.ask_parents_for_money(char, amount)
@@ -1770,6 +1780,7 @@ func _on_gift_sibling(sibling_index: int) -> void:
 	CharacterManager.modify_sibling_affection(sibling_index, affection_gain)
 	CharacterManager.modify_wealth(-cost)
 	_add_log("🎁 向%s赠礼，好感+%d，花费%d石。" % [sib_name, affection_gain, cost])
+	_mark_acted("gift_sibling_" + str(sibling_index))
 
 func _on_break_ally_sibling(sibling_index: int) -> void:
 	"""结盟决裂"""
@@ -2837,11 +2848,13 @@ func _spouse_btns_for_category(vbox: VBoxContainer, char: Dictionary) -> void:
 	var wife = char.relationships.get("spouse", {})
 	if not wife.is_empty():
 		var w_preg = "（已孕）" if wife.get("is_pregnant", false) else ""
+		# 冷却 ID 与家族面板"求子"共用，堵住绕过
 		var w_btn := _make_action_btn("🏠 与妻同房%s" % w_preg, func():
 			var result = CharacterManager.start_pregnancy("wife", 0)
 			_add_log(result.message)
+			_mark_acted("try_baby_wife")
 			_refresh_display()
-		)
+		, "try_baby_wife")
 		if wife.get("is_pregnant", false):
 			w_btn.disabled = true
 		vbox.add_child(w_btn)
@@ -2854,8 +2867,9 @@ func _spouse_btns_for_category(vbox: VBoxContainer, char: Dictionary) -> void:
 		var cn_btn := _make_action_btn("🛏 与妾%s同房%s" % [cn.get("name", "?"), cn_preg], func():
 			var result = CharacterManager.start_pregnancy("concubine", ci)
 			_add_log(result.message)
+			_mark_acted("try_baby_concubine_" + str(ci))
 			_refresh_display()
-		)
+		, "try_baby_concubine_" + str(ci))
 		if cn.get("is_pregnant", false):
 			cn_btn.disabled = true
 		vbox.add_child(cn_btn)
@@ -2868,8 +2882,9 @@ func _spouse_btns_for_category(vbox: VBoxContainer, char: Dictionary) -> void:
 		var fr_btn := _make_action_btn("👑 与夫人%s同房%s" % [fr.get("name", "?"), fr_preg], func():
 			var result = CharacterManager.start_pregnancy("furen", fi)
 			_add_log(result.message)
+			_mark_acted("try_baby_furen_" + str(fi))
 			_refresh_display()
-		)
+		, "try_baby_furen_" + str(fi))
 		if fr.get("is_pregnant", false):
 			fr_btn.disabled = true
 		vbox.add_child(fr_btn)
@@ -2882,12 +2897,13 @@ func _spouse_btns_for_category(vbox: VBoxContainer, char: Dictionary) -> void:
 		var yq_btn := _make_action_btn("🏰 与媵妾%s同房%s" % [yq.get("name", "?"), yq_preg], func():
 			var result = CharacterManager.start_pregnancy("ying_qie", yi)
 			_add_log(result.message)
+			_mark_acted("try_baby_ying_qie_" + str(yi))
 			_refresh_display()
-		)
+		, "try_baby_ying_qie_" + str(yi))
 		if yq.get("is_pregnant", false):
 			yq_btn.disabled = true
 		vbox.add_child(yq_btn)
-	# 通房同房
+	# 通房同房（同样纳入冷却，堵住无限刷）
 	var tongfangs = GameState.family_data.get("tongfangs", [])
 	for i in range(tongfangs.size()):
 		var tf = tongfangs[i]
@@ -2896,8 +2912,9 @@ func _spouse_btns_for_category(vbox: VBoxContainer, char: Dictionary) -> void:
 		var tf_btn := _make_action_btn("🌸 与通房%s同房%s" % [tf.get("name", "?"), tf_preg], func():
 			var result = CharacterManager.start_pregnancy("tongfang", ti)
 			_add_log(result.message)
+			_mark_acted("try_baby_tongfang_" + str(ti))
 			_refresh_display()
-		)
+		, "try_baby_tongfang_" + str(ti))
 		if tf.get("is_pregnant", false):
 			tf_btn.disabled = true
 		vbox.add_child(tf_btn)
@@ -4454,9 +4471,18 @@ func _on_family_member_clicked(relation_type: String, member_data: Dictionary) -
 		btn.add_theme_stylebox_override("normal", btn_styles["normal"])
 		btn.add_theme_stylebox_override("hover", btn_styles["hover"])
 		btn.add_theme_stylebox_override("pressed", btn_styles["pressed"])
+		# 冷却置灰：本季已做的动作禁用并标注
+		var cd: String = action.get("cooldown", "")
+		if not cd.is_empty() and not _can_act(cd):
+			btn.disabled = true
+			btn.text += "  ✓本季已做"
 		btn.pressed.connect(func():
 			popup.queue_free()
-			action.callback.call()
+			# 已有入口冷却的动作自行守门，其余收敛到统一执行器
+			if action.get("self_gated", false):
+				action.callback.call()
+			else:
+				_run_family_act(action.get("cooldown", ""), "本季已做过，下季再来吧。", action.callback)
 		)
 		vbox.add_child(btn)
 
@@ -4478,38 +4504,52 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 	match relation_type:
 		"father", "mother":
 			if player_age < 20:
-				actions.append({"text": "💰 要钱", "callback": func(): _on_ask_parents()})
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data)})
+				actions.append({"text": "💰 要钱", "callback": func(): _on_ask_parents(), "cooldown": "ask_parents", "self_gated": true})
+			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_" + relation_type})
 			if relation_type == "father":
-				actions.append({"text": "📜 聆听教诲", "callback": func(): _do_family_lesson(member_data)})
+				actions.append({"text": "📜 聆听教诲", "callback": func(): _do_family_lesson(member_data), "cooldown": "lesson_father"})
 			else:
-				actions.append({"text": "🏠 回家探望", "callback": func(): _do_family_visit(member_data)})
+				actions.append({"text": "🏠 回家探望", "callback": func(): _do_family_visit(member_data), "cooldown": "visit_mother"})
 		"sibling":
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data)})
-			actions.append({"text": "🎁 赠礼（5石）", "callback": func(): _on_gift_sibling(_find_sibling_index(member_data))})
-			actions.append({"text": "🤝 结盟", "callback": func(): _do_family_ally(member_data)})
-			actions.append({"text": "💔 决裂", "callback": func(): _on_break_ally_sibling(_find_sibling_index(member_data))})
+			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_sibling"})
+			actions.append({"text": "🎁 赠礼（5石）", "callback": func(): _on_gift_sibling(_find_sibling_index(member_data)), "cooldown": "gift_sibling_" + str(_find_sibling_index(member_data))})
+			actions.append({"text": "🤝 结盟", "callback": func(): _do_family_ally(member_data), "cooldown": "ally_sibling"})
+			actions.append({"text": "💔 决裂", "callback": func(): _on_break_ally_sibling(_find_sibling_index(member_data)), "cooldown": "ally_sibling"})
 		"spouse":
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data)})
-			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data)})
-			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_wife(member_data)})
-			actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data)})
-			actions.append({"text": "🎁 赏赐博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data)})
+			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_spouse"})
+			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data), "cooldown": "bond_spouse"})
+			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_wife(member_data), "cooldown": "try_baby_wife", "self_gated": true})
+			actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data), "cooldown": "test_spouse_loyalty", "self_gated": true})
+			actions.append({"text": "🎁 赏赐博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data), "cooldown": "boost_spouse_loyalty", "self_gated": true})
 		"child":
-			actions.append({"text": "💬 谈心", "callback": func(): _do_family_talk(relation_type, member_data)})
-			actions.append({"text": "👨‍🏫 教导", "callback": func(): _do_teach_specific_child(member_data)})
-			actions.append({"text": "🎯 定方向", "callback": func(): _on_set_child_direction(member_data)})
+			actions.append({"text": "💬 谈心", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_child"})
+			# 子索引：按 member_data 在子女数组里查位置（教导冷却按人区分）
+			var children: Array = CharacterManager.get_character_children(char)
+			var child_idx := -1
+			for i in range(children.size()):
+				if children[i].name == member_data.name and children[i].surname == member_data.surname:
+					child_idx = i
+					break
+			actions.append({"text": "👨‍🏫 教导", "callback": func(): _do_teach_specific_child(member_data), "cooldown": "teach_child_" + str(child_idx)})
+			actions.append({"text": "🎯 定方向", "callback": func(): _on_set_child_direction(member_data), "cooldown": "set_child_direction", "self_gated": true})
 			# 成年子女婚嫁
 			var child_age: int = GameState.current_year - member_data.get("birth_year", GameState.current_year)
 			if child_age >= 16:
 				if member_data.gender == "female" and not member_data.get("is_married_out", false):
-					actions.append({"text": "🏮 嫁女", "callback": func(): _do_marry_out_daughter(member_data)})
+					actions.append({"text": "🏮 嫁女", "callback": func(): _do_marry_out_daughter(member_data), "cooldown": "marry_child_" + member_data.name, "self_gated": true})
 				elif member_data.gender == "male" and not member_data.has("spouse"):
-					actions.append({"text": "💒 娶妻", "callback": func(): _do_marry_in_son(member_data)})
+					actions.append({"text": "💒 娶妻", "callback": func(): _do_marry_in_son(member_data), "cooldown": "marry_child_" + member_data.name, "self_gated": true})
 		"concubine":
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data)})
-			actions.append({"text": "❤️ 亲近", "callback": func(): _do_concubine_bond(member_data)})
-			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_concubine(member_data)})
+			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_concubine"})
+			actions.append({"text": "❤️ 亲近", "callback": func(): _do_concubine_bond(member_data), "cooldown": "bond_concubine"})
+			# 妾索引：按 member_data 在妾室数组里查位置（求子冷却按人区分）
+			var concubines: Array = GameState.family_data.get("concubines", [])
+			var cn_idx := -1
+			for i in range(concubines.size()):
+				if concubines[i].name == member_data.name and concubines[i].surname == member_data.surname:
+					cn_idx = i
+					break
+			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_concubine(member_data), "cooldown": "try_baby_concubine_" + str(cn_idx), "self_gated": true})
 
 	return actions
 
@@ -4841,7 +4881,7 @@ func _show_teach_picker_for_child(child_index: int) -> void:
 			popup.queue_free()
 			var result := CharacterManager.educate_child(char, child_index, subj)
 			_add_log("👨‍🏫 " + result.message)
-			_mark_acted("teach_child")
+			_mark_acted("teach_child_" + str(child_index))
 			_refresh_display()
 		)
 		vbox.add_child(btn)
