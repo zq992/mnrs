@@ -4817,78 +4817,78 @@ func _build_family_content() -> void:
 			c_btn.visible = alive
 			_family_vbox.add_child(c_btn)
 
-		# ── 妾室 ──
-		var concubines: Array = GameState.family_data.get("concubines", [])
-		if not concubines.is_empty():
-			var heading_cn := Label.new()
-			heading_cn.text = "── 妾室 ──"
-			heading_cn.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
-			heading_cn.add_theme_font_size_override("font_size", 11)
-			_family_vbox.add_child(heading_cn)
-			for cn_idx in range(concubines.size()):
-				var cn = concubines[cn_idx]
-				var cn_alive: bool = cn.get("is_alive", true)
-				if not cn_alive:
-					continue
-				var preg_info = ""
-				if cn.get("is_pregnant", false):
-					preg_info = "  🤰%d季" % cn.get("pregnancy_remaining", 0)
-				var cn_text := "妾: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [cn.surname, cn.name, CharacterManager._compute_age(cn), CharacterManager.loyalty_band(cn.get("loyalty", 50)), cn.get("intimacy", 50), preg_info]
-				var cn_btn := _make_family_button(cn_text, "concubine", cn)
-				cn_btn.visible = cn_alive
-				_family_vbox.add_child(cn_btn)
+	# ── 妾室（无子女也显示）──
+	var concubines: Array = GameState.family_data.get("concubines", [])
+	if not concubines.is_empty():
+		var heading_cn := Label.new()
+		heading_cn.text = "── 妾室 ──"
+		heading_cn.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
+		heading_cn.add_theme_font_size_override("font_size", 11)
+		_family_vbox.add_child(heading_cn)
+		for cn_idx in range(concubines.size()):
+			var cn = concubines[cn_idx]
+			var cn_alive: bool = cn.get("is_alive", true)
+			if not cn_alive:
+				continue
+			var preg_info = ""
+			if cn.get("is_pregnant", false):
+				preg_info = "  🤰%d季" % cn.get("pregnancy_remaining", 0)
+			var cn_text := "妾: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [cn.surname, cn.name, CharacterManager._compute_age(cn), CharacterManager.loyalty_band(cn.get("loyalty", 60)), cn.get("intimacy", 50), preg_info]
+			var cn_btn := _make_family_button(cn_text, "concubine", cn)
+			cn_btn.visible = cn_alive
+			_family_vbox.add_child(cn_btn)
 
-		# ── 媵妾（诸侯）──
-		var ying_qie: Array = GameState.family_data.get("ying_qie", [])
-		if not ying_qie.is_empty():
-			var heading_yq := Label.new()
-			heading_yq.text = "── 媵妾 ──"
-			heading_yq.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
-			heading_yq.add_theme_font_size_override("font_size", 11)
-			_family_vbox.add_child(heading_yq)
-			for yq in ying_qie:
-				if not yq.get("is_alive", true):
-					continue
-				var yq_preg: String = ""
-				if yq.get("is_pregnant", false):
-					yq_preg = "  🤰%d季" % yq.get("pregnancy_remaining", 0)
-				var yq_text := "媵: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [yq.surname, yq.name, CharacterManager._compute_age(yq), CharacterManager.loyalty_band(yq.get("loyalty", 50)), yq.get("intimacy", 50), yq_preg]
-				var yq_btn := _make_family_button(yq_text, "ying_qie", yq)
-				_family_vbox.add_child(yq_btn)
-		# ── 夫人（天子）──
-		var furens: Array = GameState.family_data.get("furens", [])
-		if not furens.is_empty():
-			var heading_fr := Label.new()
-			heading_fr.text = "── 夫人 ──"
-			heading_fr.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
-			heading_fr.add_theme_font_size_override("font_size", 11)
-			_family_vbox.add_child(heading_fr)
-			for fr in furens:
-				if not fr.get("is_alive", true):
-					continue
-				var fr_preg: String = ""
-				if fr.get("is_pregnant", false):
-					fr_preg = "  🤰%d季" % fr.get("pregnancy_remaining", 0)
-				var fr_text := "夫人: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [fr.surname, fr.name, CharacterManager._compute_age(fr), CharacterManager.loyalty_band(fr.get("loyalty", 50)), fr.get("intimacy", 50), fr_preg]
-				var fr_btn := _make_family_button(fr_text, "furen", fr)
-				_family_vbox.add_child(fr_btn)
-		# ── 通房 ──
-		var tongfangs: Array = GameState.family_data.get("tongfangs", [])
-		if not tongfangs.is_empty():
-			var heading_tf := Label.new()
-			heading_tf.text = "── 通房 ──"
-			heading_tf.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
-			heading_tf.add_theme_font_size_override("font_size", 11)
-			_family_vbox.add_child(heading_tf)
-			for tf in tongfangs:
-				if not tf.get("is_alive", true):
-					continue
-				var tf_preg: String = ""
-				if tf.get("is_pregnant", false):
-					tf_preg = "  🤰%d季" % tf.get("pregnancy_remaining", 0)
-				var tf_text := "通房: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [tf.surname, tf.name, CharacterManager._compute_age(tf), CharacterManager.loyalty_band(tf.get("loyalty", 50)), tf.get("intimacy", 50), tf_preg]
-				var tf_btn := _make_family_button(tf_text, "tongfang", tf)
-				_family_vbox.add_child(tf_btn)
+	# ── 媵妾（诸侯）──
+	var ying_qie: Array = GameState.family_data.get("ying_qie", [])
+	if not ying_qie.is_empty():
+		var heading_yq := Label.new()
+		heading_yq.text = "── 媵妾 ──"
+		heading_yq.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
+		heading_yq.add_theme_font_size_override("font_size", 11)
+		_family_vbox.add_child(heading_yq)
+		for yq in ying_qie:
+			if not yq.get("is_alive", true):
+				continue
+			var yq_preg: String = ""
+			if yq.get("is_pregnant", false):
+				yq_preg = "  🤰%d季" % yq.get("pregnancy_remaining", 0)
+			var yq_text := "媵: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [yq.surname, yq.name, CharacterManager._compute_age(yq), CharacterManager.loyalty_band(yq.get("loyalty", 70)), yq.get("intimacy", 50), yq_preg]
+			var yq_btn := _make_family_button(yq_text, "ying_qie", yq)
+			_family_vbox.add_child(yq_btn)
+	# ── 夫人（天子）──
+	var furens: Array = GameState.family_data.get("furens", [])
+	if not furens.is_empty():
+		var heading_fr := Label.new()
+		heading_fr.text = "── 夫人 ──"
+		heading_fr.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
+		heading_fr.add_theme_font_size_override("font_size", 11)
+		_family_vbox.add_child(heading_fr)
+		for fr in furens:
+			if not fr.get("is_alive", true):
+				continue
+			var fr_preg: String = ""
+			if fr.get("is_pregnant", false):
+				fr_preg = "  🤰%d季" % fr.get("pregnancy_remaining", 0)
+			var fr_text := "夫人: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [fr.surname, fr.name, CharacterManager._compute_age(fr), CharacterManager.loyalty_band(fr.get("loyalty", 85)), fr.get("intimacy", 50), fr_preg]
+			var fr_btn := _make_family_button(fr_text, "furen", fr)
+			_family_vbox.add_child(fr_btn)
+	# ── 通房 ──
+	var tongfangs: Array = GameState.family_data.get("tongfangs", [])
+	if not tongfangs.is_empty():
+		var heading_tf := Label.new()
+		heading_tf.text = "── 通房 ──"
+		heading_tf.add_theme_color_override("font_color", VisualConfig.DARK_GOLD)
+		heading_tf.add_theme_font_size_override("font_size", 11)
+		_family_vbox.add_child(heading_tf)
+		for tf in tongfangs:
+			if not tf.get("is_alive", true):
+				continue
+			var tf_preg: String = ""
+			if tf.get("is_pregnant", false):
+				tf_preg = "  🤰%d季" % tf.get("pregnancy_remaining", 0)
+			var tf_text := "通房: %s%s · %d岁 · 忠诚：%s · 亲密：%d%s" % [tf.surname, tf.name, CharacterManager._compute_age(tf), CharacterManager.loyalty_band(tf.get("loyalty", 50)), tf.get("intimacy", 50), tf_preg]
+			var tf_btn := _make_family_button(tf_text, "tongfang", tf)
+			_family_vbox.add_child(tf_btn)
 
 	# 通知 ScrollContainer 重新计算内容高度
 	if _family_vbox:
@@ -5015,8 +5015,8 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 			actions.append({"text": "🤝 结盟", "callback": func(): _do_family_ally(member_data), "cooldown": "ally_sibling"})
 			actions.append({"text": "💔 决裂", "callback": func(): _on_break_ally_sibling(_find_sibling_index(member_data)), "cooldown": "ally_sibling"})
 		"spouse":
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_spouse"})
-			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data), "cooldown": "bond_spouse"})
+			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_wife_0"})
+			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data, "wife", 0), "cooldown": "bond_wife_0"})
 			var sp_preg = member_data.get("is_pregnant", false)
 			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_wife(member_data), "cooldown": "try_baby_wife", "self_gated": true,
 				"disabled": sp_preg, "disabled_suffix": "（有孕在身）"})
@@ -5044,15 +5044,15 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 				elif member_data.gender == "male" and not member_data.has("spouse"):
 					actions.append({"text": "💒 娶妻", "callback": func(): _do_marry_in_son(member_data), "cooldown": "marry_child_" + member_data.name, "self_gated": true})
 		"concubine":
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_concubine"})
-			actions.append({"text": "❤️ 亲近", "callback": func(): _do_concubine_bond(member_data), "cooldown": "bond_concubine"})
-			# 妾索引：按 member_data 在妾室数组里查位置（求子冷却按人区分）
+			# 妾索引：按 member_data 在妾室数组里查位置（冷却全部按人区分）
 			var concubines: Array = GameState.family_data.get("concubines", [])
 			var cn_idx := -1
 			for i in range(concubines.size()):
 				if concubines[i].name == member_data.name and concubines[i].surname == member_data.surname:
 					cn_idx = i
 					break
+			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_concubine_" + str(cn_idx)})
+			actions.append({"text": "❤️ 亲近", "callback": func(): _do_concubine_bond(member_data, cn_idx), "cooldown": "bond_concubine_" + str(cn_idx)})
 			var cn_preg = concubines[cn_idx].get("is_pregnant", false) if cn_idx >= 0 else false
 			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_concubine(member_data), "cooldown": "try_baby_concubine_" + str(cn_idx), "self_gated": true,
 				"disabled": cn_preg, "disabled_suffix": "（有孕在身）"})
@@ -5061,9 +5061,7 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 			actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data, "concubine", cn_idx), "cooldown": "test_concubine_" + str(cn_idx), "self_gated": true})
 			actions.append({"text": "🎁 安抚博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data, "concubine", cn_idx), "cooldown": "boost_concubine_" + str(cn_idx), "self_gated": true})
 		"furen", "ying_qie", "tongfang":
-			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_" + relation_type})
-			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data, "bond_" + relation_type), "cooldown": "bond_" + relation_type})
-			# 求子：按成员索引区分冷却（统一判定入口）
+			# 成员索引：按名字查位置（冷却全部按人区分）
 			var consort_arr: Array = GameState.family_data.get(
 				"furens" if relation_type == "furen" else ("ying_qie" if relation_type == "ying_qie" else "tongfangs"), [])
 			var cs_idx := -1
@@ -5072,6 +5070,10 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 					cs_idx = i
 					break
 			if cs_idx >= 0:
+				actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_" + relation_type + "_" + str(cs_idx)})
+				actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data, relation_type, cs_idx), "cooldown": "bond_" + relation_type + "_" + str(cs_idx)})
+				actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data, relation_type, cs_idx), "cooldown": "test_" + relation_type + "_" + str(cs_idx), "self_gated": true})
+				actions.append({"text": "🎁 安抚博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data, relation_type, cs_idx), "cooldown": "boost_" + relation_type + "_" + str(cs_idx), "self_gated": true})
 				var cs_preg = consort_arr[cs_idx].get("is_pregnant", false)
 				actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby(relation_type, cs_idx), "cooldown": "try_baby_" + relation_type + "_" + str(cs_idx), "self_gated": true,
 					"disabled": cs_preg, "disabled_suffix": "（有孕在身）"})
@@ -5105,12 +5107,17 @@ func _do_family_talk(relation_type: String, member_data: Dictionary) -> void:
 		if sib_idx >= 0:
 			var aff_gain = 1 + randi_range(0, 4)  # +1~5
 			CharacterManager.modify_sibling_affection(sib_idx, aff_gain)
-	# 与妻妾交谈记入本季亲密（忠诚衰减豁免）
+	# 与妻妾交谈记入本季亲密（忠诚衰减豁免）+ 成员级冷却
 	if relation_type in ["spouse", "concubine", "furen", "ying_qie", "tongfang"]:
-		var c_idx := _find_consort_index(relation_type, member_data)
+		var consort_type := "wife" if relation_type == "spouse" else relation_type
+		var c_idx := _find_consort_index(consort_type, member_data)
 		if c_idx >= 0:
-			_mark_intimate(relation_type, c_idx)
-	_mark_acted("talk_" + relation_type)
+			_mark_intimate(consort_type, c_idx)
+			_mark_acted("talk_%s_%d" % [consort_type, c_idx])
+		else:
+			_mark_acted("talk_" + relation_type)
+	else:
+		_mark_acted("talk_" + relation_type)
 
 
 func _do_family_lesson(member_data: Dictionary) -> void:
@@ -5185,8 +5192,8 @@ func _do_family_ally(member_data: Dictionary) -> void:
 	_mark_acted("ally_sibling")
 
 
-func _do_concubine_bond(member_data: Dictionary) -> void:
-	"""与妾室亲近：CHA掷骰 → 回复健康"""
+func _do_concubine_bond(member_data: Dictionary, cn_idx: int) -> void:
+	"""与妾室亲近：CHA掷骰 → 回复健康；记入本季亲密豁免忠诚衰减（3.4）"""
 	var char = GameState.current_character
 	var cha: int = char.attributes.get("cha", 10)
 	var bonus: int = DiceSystem.attr_to_bonus(cha)
@@ -5201,13 +5208,15 @@ func _do_concubine_bond(member_data: Dictionary) -> void:
 		CharacterManager.modify_health(char, 1)
 		_add_log("❤️ 与妾室%s温存片刻——健康+1。" % name_str)
 	else:
-		_add_log("❤️ 今日妾室%s身体不适……" % name_str)
-	GameState.current_character["_last_bond_season"] = 0
-	_mark_acted("bond_concubine")
+		# 3.6 失败档补具体反馈：身体不适，健康亦受损
+		CharacterManager.modify_health(char, -1)
+		_add_log("❤️ 今日妾室%s身体不适，未能亲热——你反受其累，健康-1。" % name_str)
+	if cn_idx >= 0:
+		_mark_intimate("concubine", cn_idx)
 
 func _do_test_spouse_loyalty(member_data: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> void:
-	"""考察妻妾忠诚（模糊评估）"""
-	var cooldown_id: String = "test_spouse_loyalty" if mother_type == "wife" else "test_concubine_%d" % mother_index
+	"""考察妻妾忠诚（模糊评估）；冷却 ID 按成员泛化 test_<type>_<idx>"""
+	var cooldown_id: String = "test_spouse_loyalty" if mother_type == "wife" else "test_%s_%d" % [mother_type, mother_index]
 	if not _can_act(cooldown_id):
 		_add_log("本季已考察过这位妻妾的忠诚，下季再来吧。")
 		return
@@ -5217,8 +5226,8 @@ func _do_test_spouse_loyalty(member_data: Dictionary, mother_type: String = "wif
 	_refresh_display()
 
 func _do_boost_spouse_loyalty(member_data: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> void:
-	"""赏赐博妻妾欢心"""
-	var cooldown_id: String = "boost_spouse_loyalty" if mother_type == "wife" else "boost_concubine_%d" % mother_index
+	"""赏赐博妻妾欢心；冷却 ID 按成员泛化 boost_<type>_<idx>"""
+	var cooldown_id: String = "boost_spouse_loyalty" if mother_type == "wife" else "boost_%s_%d" % [mother_type, mother_index]
 	if not _can_act(cooldown_id):
 		_add_log("本季已赏赐过这位妻妾，下季再来吧。")
 		return
@@ -5321,8 +5330,8 @@ func _do_marry_in_son(member_data: Dictionary) -> void:
 		_mark_acted(cooldown_id)
 	_refresh_display()
 
-func _do_family_bond(member_data: Dictionary, cooldown_id: String = "bond_spouse") -> void:
-	"""与配偶亲近：CHA掷骰 → 回复健康"""
+func _do_family_bond(member_data: Dictionary, mother_type: String, mother_index: int) -> void:
+	"""与妻妾亲近：CHA掷骰 → 回复健康；记入本季亲密豁免忠诚衰减（冷却由 _run_family_act 统一打点）"""
 	var char = GameState.current_character
 	var cha: int = char.attributes.get("cha", 10)
 	var bonus: int = DiceSystem.attr_to_bonus(cha)
@@ -5340,15 +5349,7 @@ func _do_family_bond(member_data: Dictionary, cooldown_id: String = "bond_spouse
 	else:
 		CharacterManager.modify_ambition(char, -1)
 		_add_log("❤️ 今日与%s有些疏远……" % name_str)
-	# 亲近记入本季亲密（忠诚衰减豁免）
-	var b_type := cooldown_id.trim_prefix("bond_")
-	if b_type == "spouse":
-		b_type = "wife"
-	var b_idx := _find_consort_index(b_type, member_data)
-	if b_idx >= 0:
-		_mark_intimate(b_type, b_idx)
-	GameState.current_character["_last_bond_season"] = 0
-	_mark_acted(cooldown_id)
+	_mark_intimate(mother_type, mother_index)
 
 
 func _on_set_child_direction(child: Dictionary) -> void:

@@ -2616,7 +2616,24 @@ func update_parents_aging() -> Dictionary:
 		var spouse = char.relationships.spouse
 		spouse["age"] = _compute_age(spouse)
 		if spouse.age > 55 and randf() < 0.06:
+			spouse["is_alive"] = false
+			spouse["is_pregnant"] = false
 			notices.append("☠ 配偶%s%s·%s氏去世，享年%d岁。" % [spouse.get("surname", ""), spouse.get("name", ""), spouse.get("clan", ""), spouse.age])
+			# 死妻让位——清空配偶位，玩家可再娶（3.8）
+			char.relationships.spouse = {}
+	# 侧室老化（妾室/夫人/媵妾/通房）
+	for consort_row in _consorts_table(char):
+		if consort_row.type == "wife":
+			continue
+		for ci in range(consort_row.list.size()):
+			var cmember = consort_row.list[ci]
+			if cmember.is_empty() or not cmember.get("is_alive", true):
+				continue
+			cmember["age"] = _compute_age(cmember)
+			if cmember.age > 55 and randf() < 0.05:
+				cmember["is_alive"] = false
+				cmember["is_pregnant"] = false
+				notices.append("☠ %s%s%s去世，享年%d岁。" % [_consort_label(consort_row.type), cmember.get("surname", ""), cmember.get("name", ""), cmember.age])
 	# 子女老化
 	var children = CharacterManager.get_character_children(char)
 	for child in children:
