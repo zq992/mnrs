@@ -59,6 +59,12 @@ var current_location: String = "镐京"  # 当前位置
 var explored_locations: Array = ["镐京"]  # 已探索地点
 
 # ============================================================
+# 成就 & 里程碑
+# ============================================================
+var achievements: Dictionary = {}   # 已解锁成就 {id: {"year": 解锁年份}}
+var milestones: Dictionary = {}     # 已达成里程碑 {id: {"year": 达成年份}}
+
+# ============================================================
 # 信号定义
 # ============================================================
 signal year_changed(new_year: int)
@@ -66,6 +72,8 @@ signal character_updated(character: Dictionary)
 signal event_triggered(event_data: Dictionary)
 signal game_over(reason: String)
 signal location_changed(new_location: String)
+signal achievement_unlocked(achievement_id: String, achievement_name: String)
+signal milestone_reached(milestone_id: String, milestone_name: String)
 
 # ============================================================
 # 公共方法
@@ -84,6 +92,8 @@ func advance_time(years: int = 1) -> void:
 	current_year += years
 	year_changed.emit(current_year)
 	_update_era_progress()
+	check_achievements()
+	check_milestones()
 
 func _update_era_progress() -> void:
 	var dynasty_data = DynastyManager.get_current_dynasty_data()
@@ -100,6 +110,7 @@ func change_location(location: String) -> void:
 	if location not in explored_locations:
 		explored_locations.append(location)
 	location_changed.emit(location)
+	check_achievements()
 
 func log_event(event_id: String, choice_made: int, dice_result: String, effects: Array) -> void:
 	event_history.append({
@@ -109,6 +120,153 @@ func log_event(event_id: String, choice_made: int, dice_result: String, effects:
 		"dice_result": dice_result,
 		"effects": effects
 	})
+	check_achievements()
+
+# ============================================================
+# 成就 & 里程碑系统
+# ============================================================
+# 数据驱动：新增成就/里程碑只需在对应定义表追加一条记录。
+# type 支持：
+#   start       游戏已开始（角色存在）
+#   wealth      家族财富 >= value
+#   reputation  角色声望 >= value
+#   locations   已探索地点数 >= value
+#   top_skill   最高技能等级 >= value
+#   generation  家族代数 >= value
+#   era         朝代进度 >= value（0.0-1.0）
+#   events      已触发事件数 >= value
+#   age         角色年龄 >= value
+#   social      身份等级 >= value（1奴 2庶 3士 4卿大夫 5诸侯 6天子）
+#   children    子女人数 >= value
+#   heirloom    传家宝数量 >= value
+const ACHIEVEMENT_DEFS := [
+	{"id": "start",         "type": "start",      "value": 0,   "name": "初入周土", "desc": "开启华夏人生，踏上西周之路。"},
+	{"id": "wealth_100",    "type": "wealth",     "value": 100, "name": "衣食无忧", "desc": "家族财富积累至100石。"},
+	{"id": "wealth_1000",   "type": "wealth",     "value": 1000, "name": "富甲一方", "desc": "家族财富积累至1000石。"},
+	{"id": "rep_100",       "type": "reputation", "value": 100, "name": "崭露头角", "desc": "家族声望达到100。"},
+	{"id": "rep_500",       "type": "reputation", "value": 500, "name": "名动天下", "desc": "家族声望达到500。"},
+	{"id": "loc_5",         "type": "locations",  "value": 5,   "name": "足迹四方", "desc": "探索5个不同地点。"},
+	{"id": "skill_5",       "type": "top_skill",  "value": 5,   "name": "炉火纯青", "desc": "任意技能达到5级。"},
+	{"id": "gen_3",         "type": "generation", "value": 3,   "name": "开枝散叶", "desc": "家族传承至第3代。"},
+	{"id": "gen_5",         "type": "generation", "value": 5,   "name": "绵延不绝", "desc": "家族传承至第5代。"},
+	{"id": "events_20",     "type": "events",     "value": 20,  "name": "阅尽千帆", "desc": "经历20次事件抉择。"},
+	{"id": "children_3",    "type": "children",   "value": 3,   "name": "儿孙满堂", "desc": "膝下已有3名子女。"},
+	{"id": "heirloom_3",    "type": "heirloom",   "value": 3,   "name": "传家之宝", "desc": "家族积累3件传家宝。"},
+	{"id": "high_office",   "type": "social",     "value": 5,   "name": "位极人臣", "desc": "身份晋升为诸侯。"},
+	{"id": "long_life",     "type": "age",        "value": 80,  "name": "仁者寿",   "desc": "寿至耄耋，享年八十。"},
+]
+
+const MILESTONE_DEFS := [
+	{"id": "adult",    "type": "age", "value": 20, "name": "弱冠之年", "desc": "年满二十，行冠礼正式成人。"},
+	{"id": "thirty",   "type": "age", "value": 30, "name": "而立之年", "desc": "三十而立，事业初成。"},
+	{"id": "forty",    "type": "age", "value": 40, "name": "不惑之年", "desc": "四十不惑，处世清明。"},
+	{"id": "fifty",    "type": "age", "value": 50, "name": "知命之年", "desc": "五十知天命。"},
+	{"id": "sixty",    "type": "age", "value": 60, "name": "花甲之年", "desc": "六十花甲，历经风雨。"},
+	{"id": "seventy",  "type": "age", "value": 70, "name": "古稀之年", "desc": "人生七十古来稀。"},
+	{"id": "era_half", "type": "era", "value": 0.5, "name": "王朝过半", "desc": "亲历西周步入后半程。"},
+	{"id": "era_end",  "type": "era", "value": 1.0, "name": "王朝落幕", "desc": "见证西周覆灭，历史翻页。"},
+]
+
+func check_achievements() -> Array:
+	"""检查全部成就，解锁新达成的项，返回新解锁id列表。"""
+	var newly: Array = []
+	for entry in ACHIEVEMENT_DEFS:
+		var id: String = entry.id
+		if achievements.has(id):
+			continue
+		if _eval_def(entry):
+			_unlock_entry(achievements, "成就", id, entry.name)
+			newly.append(id)
+			achievement_unlocked.emit(id, entry.name)
+	return newly
+
+func check_milestones() -> Array:
+	"""检查全部里程碑，返回新达成id列表。"""
+	var newly: Array = []
+	for entry in MILESTONE_DEFS:
+		var id: String = entry.id
+		if milestones.has(id):
+			continue
+		if _eval_def(entry):
+			_unlock_entry(milestones, "里程碑", id, entry.name)
+			newly.append(id)
+			milestone_reached.emit(id, entry.name)
+	return newly
+
+func unlock_achievement(achievement_id: String) -> bool:
+	"""供外部按id直接解锁（如剧情达成），返回是否为新解锁。"""
+	if achievements.has(achievement_id):
+		return false
+	var name := achievement_id
+	for entry in ACHIEVEMENT_DEFS:
+		if entry.id == achievement_id:
+			name = entry.name
+			break
+	_unlock_entry(achievements, "成就", achievement_id, name)
+	achievement_unlocked.emit(achievement_id, name)
+	return true
+
+func _eval_def(entry: Dictionary) -> bool:
+	var value = entry.value
+	match entry.type:
+		"start":
+			return not current_character.is_empty()
+		"wealth":
+			return family_data.get("wealth", 0) >= value
+		"reputation":
+			return current_character.get("reputation", 0) >= value
+		"locations":
+			return explored_locations.size() >= value
+		"top_skill":
+			return get_max_skill_level() >= value
+		"generation":
+			return family_data.get("generation_count", 1) >= value
+		"era":
+			return era_progress >= value
+		"events":
+			return event_history.size() >= value
+		"age":
+			return get_character_age() >= value
+		"social":
+			return current_character.get("social_level", 3) >= value
+		"children":
+			return current_character.get("relationships", {}).get("children", []).size() >= value
+		"heirloom":
+			return family_data.get("heirlooms", []).size() >= value
+	return false
+
+func _unlock_entry(store: Dictionary, label: String, id: String, display_name: String) -> void:
+	store[id] = {"year": current_year}
+	# 写入史册（成就/里程碑数量有限，无需裁剪）
+	var line := "[color=#8fbc8f]〔%s·%d年〕🎊 达成%s「%s」！[/color]\n" % [
+		TimeManager.get_season_name(), abs(current_year), label, display_name
+	]
+	full_log.append(line)
+
+func get_character_age() -> int:
+	"""当前主角年龄（未开局时返回0）。"""
+	return current_year - current_character.get("birth_year", current_year)
+
+func get_max_skill_level() -> int:
+	"""当前主角最高技能等级。"""
+	var max_level := 0
+	for skill in current_character.get("skills", []):
+		var parts = String(skill).split(":")
+		if parts.size() == 2:
+			max_level = maxi(max_level, int(parts[1]))
+	return max_level
+
+func get_achievement_count() -> int:
+	return achievements.size()
+
+func get_milestone_count() -> int:
+	return milestones.size()
+
+func get_unlocked_achievements() -> Array:
+	return achievements.keys()
+
+func get_unlocked_milestones() -> Array:
+	return milestones.keys()
 
 # ============================================================
 # 存档/读档
@@ -134,6 +292,8 @@ func save_game() -> String:
 		"explored_locations": explored_locations,
 		"full_log": full_log,
 		"tutorial_done": tutorial_done,
+		"achievements": achievements,
+		"milestones": milestones,
 	}
 	var json_str := JSON.stringify(save_data, "\t")
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -172,6 +332,11 @@ func load_game() -> String:
 	explored_locations = save_data.get("explored_locations", ["镐京"])
 	full_log = save_data.get("full_log", [])
 	tutorial_done = save_data.get("tutorial_done", false)
+	achievements = save_data.get("achievements", {})
+	milestones = save_data.get("milestones", {})
+	# 旧档兼容：加载后立即补算成就/里程碑
+	check_achievements()
+	check_milestones()
 	return "读档成功——回到公元前%d年，%s。" % [abs(current_year), current_location]
 
 func has_save() -> bool:
