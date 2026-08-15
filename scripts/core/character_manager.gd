@@ -451,11 +451,10 @@ func can_promote_to_qingdafu(character: Dictionary) -> bool:
 	var pos = character.get("official_position", "")
 	return not pos.is_empty()
 
-func promote_character(character: Dictionary) -> Dictionary:
-	if not can_promote(character):
-		return {"success": false, "message": "条件不满足，无法跃迁"}
-
+func grant_promotion(character: Dictionary) -> Dictionary:
+	"""直接晋升一级（无 can_promote 门槛）。四道门统一调用。保留封地/家兵/衰减/停滞重置/level_start_year。"""
 	var old_level = character.social_level
+	character.level_start_year = GameState.current_year
 	character.social_level = old_level + 1
 	character.social_class = SOCIAL_CLASSES[character.social_level].name
 
@@ -514,6 +513,108 @@ func promote_character(character: Dictionary) -> Dictionary:
 			decay_msg
 		]
 	}
+
+func promote_character(character: Dictionary) -> Dictionary:
+	"""主晋升入口：can_promote 门槛通过后调 grant_promotion"""
+	if not can_promote(character):
+		return {"success": false, "message": "条件不满足，无法跃迁"}
+	return grant_promotion(character)
+
+func _do_hereditary_succession(character: Dictionary, father: Dictionary) -> Dictionary:
+	"""世袭门：父亡后承袭父之爵位/官职/封地/家兵（无晋升衰减）"""
+	var dad_level = father.get("social_level", 2)
+	if dad_level <= character.social_level:
+		return {"success": false, "message": "父之身份不高于你，无可承袭。"}
+	var old_level = character.social_level
+	character.social_level = dad_level
+	character.social_class = SOCIAL_CLASSES[dad_level].name
+	character.level_start_year = GameState.current_year
+	var dad_prof = father.get("profession", "")
+	if dad_prof != "":
+		character.profession = dad_prof
+	if dad_level >= 5:
+		var dad_fief = father.get("fief", "")
+		if not dad_fief.is_empty():
+			character["fief"] = dad_fief
+		var dad_noble = father.get("noble_title", "")
+		if not dad_noble.is_empty():
+			character["noble_title"] = dad_noble
+			character["noble_level"] = father.get("noble_level", 1)
+	# 家兵继承
+	if dad_level >= 4:
+		character.max_troops = TROOP_LIMITS.get(dad_level, {})
+		character.household_troops = {"步兵": 30 + randi_range(0, 40), "车兵": 0, "王师": 0}
+	return {"success": true, "old_level": old_level, "new_level": dad_level, "new_class": character.social_class}
+
+func _do_merit_recommendation(character: Dictionary) -> Dictionary:
+	"""举贤门（士→卿大夫）：声望≥60+技能≥3+三年大比窗口，失败累计乡望4-6次必成"""
+	# 资历门
+	var need = tenure_requirement(character.social_level)
+	if get_tenure_years(character) < need:
+		return {"success": false, "message": "资历尚浅（需任职 %d 年），乡大夫尚不荐你。" % need}
+	# 身份门：唯士可应乡举
+	if character.social_level != 3:
+		return {"success": false, "message": "唯士人可应乡举大比。"}
+	if character.derived.get("reputation", 0) < 60:
+		return {"success": false, "message": "声望不足（需≥60），乡里无人举荐。"}
+	var max_skill := 0
+	for sk in character.get("skills", []):
+		var parts: PackedStringArray = String(sk).split(":")
+		if parts.size() == 2:
+			max_skill = maxi(max_skill, int(parts[1]))
+	if max_skill < 3:
+		return {"success": false, "message": "才艺不精（最高技能需≥3），难入乡大夫法眼。"}
+	# 大比窗口：每三年一期（用 last_juXian_window 记）
+	var last_window = GameState.family_data.get("last_juXian_window", -999)
+	if GameState.current_year - last_window < 3:
+		return {"success": false, "message": "今年非大比之年——乡大夫每三年一大比，来年再试。"}
+	# 乡望累计≥50 必成；掷骰决定成败
+	var xiangwang = GameState.family_data.get("xiangwang", 0)
+	var bonus = DiceSystem.attr_to_bonus(character.attributes.get("cha", 10))
+	var roll: Dictionary = DiceSystem.roll_dice("2d6", bonus + int(xiangwang / 10), 0)
+	if xiangwang >= 50:
+		roll = {"tier": 0, "final_value": 12}
+	if roll.get("tier", 9) <= 1:
+		GameState.family_data["xiangwang"] = 0
+		GameState.family_data["last_juXian_window"] = GameState.current_year
+		var g = grant_promotion(character)
+		return {"success": true, "message": "乡大夫大比奏捷——荐于朝堂，%s" % g.get("message", "")}
+	else:
+		GameState.family_data["xiangwang"] = xiangwang + 10
+		GameState.family_data["last_juXian_window"] = GameState.current_year
+		return {"success": false, "message": "大比落第——乡望累积 %d/50，三年后再试。" % (xiangwang + 10)}
+
+func _do_enfeoffment(character: Dictionary) -> Dictionary:
+	"""受封门（卿→诸侯）：声望≥120+势力≥60+军功≥3+王宠≥60，尝试耗王宠30，base30%上限85%"""
+	# 资历门
+	var need = tenure_requirement(character.social_level)
+	if get_tenure_years(character) < need:
+		return {"success": false, "message": "资历尚浅（需任职 %d 年），不宜请封。" % need}
+	if character.social_level != 4:
+		return {"success": false, "message": "唯卿大夫可受封列侯。"}
+	if character.derived.get("reputation", 0) < 120:
+		return {"success": false, "message": "声望不足（需≥120），裂土之封恐遭物议。"}
+	if character.derived.get("power", 0) < 60:
+		return {"success": false, "message": "势力不足（需≥60），无兵无地难领一国之政。"}
+	if character.get("military_merit", 0) < 3:
+		return {"success": false, "message": "军功不足（需≥3），未立勋劳不可裂土。"}
+	if character.get("king_favor", 20) < 60:
+		return {"success": false, "message": "王宠不足（需≥60），天子尚无赏识。"}
+	# 尝试消耗王宠30
+	modify_king_favor(character, -30)
+	# 成功率：base 30% + 修正，上限85%
+	var chance := 30.0
+	var rep = character.derived.get("reputation", 0)
+	var mm = character.get("military_merit", 0)
+	var kf = character.get("king_favor", 20)
+	chance += max(0.0, (rep - 120) / 4.0)     # 每超4点声望+1%
+	chance += max(0.0, (mm - 3) * 5.0)         # 每超1军功+5%
+	chance += max(0.0, (kf - 60) * 0.3)        # 每超1王宠+0.3%
+	chance = min(chance, 85.0)
+	if randf() * 100.0 > chance:
+		return {"success": false, "message": "王命未许——天子斟酌再三，封疆之事暂缓（成功率 %.0f%%）。" % chance}
+	var g = grant_promotion(character)
+	return {"success": true, "message": "册命大典——天子裂土封疆，%s" % g.get("message", "")}
 
 func demote_character(character: Dictionary, target_level: int = 2) -> Dictionary:
 	var old_level: int = character.social_level

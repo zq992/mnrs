@@ -564,6 +564,121 @@
         }
       ],
       "illustration": "res://resources/textures/events/event_martial_test.png"
+    },
+    {
+      "id": "wz_shi_merit_recommendation",
+      "type": "identity",
+      "title": "乡大夫大比",
+      "text": "三年一期的乡大夫大比又至。镐京四野的士人齐聚乡学，比试六艺、考校德行——中选者得乡大夫举荐于朝，从此位列士林之巅。你亦在应举之列。",
+      "trigger_weight": {
+        "base": 6
+      },
+      "seasons": [
+        "春"
+      ],
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "士"
+        }
+      ],
+      "choices": [
+        {
+          "text": "献上才艺，应乡举大比",
+          "resolution": {
+            "attr": "int",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你的策论精妙绝伦，乡大夫抚掌大赞——当众许诺荐你于朝堂。声望大振！",
+              "success": "你从容应对诸般考校，乡老们频频点头，视为可造之材。",
+              "partial": "你发挥平平，几项比试都算应付了过去。",
+              "failure": "临场紧张，射礼脱靶、书数算错，乡大夫摇头叹息。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+8",
+            "success": "reputation+3",
+            "partial": "reputation+1",
+            "failure": "reputation-2"
+          }
+        },
+        {
+          "text": "自量才疏，静观来年",
+          "resolution": {
+            "attr": "vir",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你于一旁静观考校，反而参透了不少门道——来年必有把握。",
+              "success": "你在场边观摩，对乡举的规矩了然于胸。",
+              "partial": "你远远看着，没看出多少门道。",
+              "failure": "你躲在一旁，被乡大夫看见，斥为怯懦。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+3",
+            "success": "",
+            "partial": "",
+            "failure": "reputation-1"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_shi_enfeoffment",
+      "type": "identity",
+      "title": "册命大典",
+      "text": "天子于宗庙举行册命大典，诸侯列国来朝。镐京钟鼓齐鸣，史官太祝朗声宣册——今日册命之中，或许便有你的一份封疆之诏。",
+      "trigger_weight": {
+        "base": 6
+      },
+      "prerequisites": [
+        {
+          "type": "social_class",
+          "value": "卿大夫"
+        }
+      ],
+      "choices": [
+        {
+          "text": "趋前领命，请受封疆",
+          "resolution": {
+            "attr": "cha",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你趋前拜舞，应对得体。天子龙颜大悦，当殿议定册封事宜！",
+              "success": "你出班奏对，言辞恳切，天子微微颔首。",
+              "partial": "你上前请命，却见天子沉吟不语。",
+              "failure": "你一时失仪，被太祝喝止，面红耳赤地退回班列。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+10",
+            "success": "reputation+5",
+            "partial": "",
+            "failure": "reputation-3"
+          }
+        },
+        {
+          "text": "谦辞礼让，静候王命",
+          "resolution": {
+            "attr": "vir",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你的谦逊让诸侯卿士交口称赞——王命自会落在识大体之人的头上。",
+              "success": "你谦辞得体，尽显臣子礼数。",
+              "partial": "你低头不语，无人注意到你。",
+              "failure": "你推辞得太假，被同僚暗暗讥笑。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+6",
+            "success": "reputation+2",
+            "partial": "",
+            "failure": "reputation-1"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
     }
   ]
 }

@@ -763,6 +763,10 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 	var char_for_cat := GameState.current_character
 	if cat_id == "career" and not char_for_cat.is_empty():
 		extra_count += 1   # 晋升之门（始终显示，资格可视）
+		if char_for_cat.social_level <= 3:
+			extra_count += 2   # 耕作/从军
+		if char_for_cat.social_level >= 3 and not _attended_court_this_season:
+			extra_count += 1   # 朝觐
 		if char_for_cat.reputation >= 90 and char_for_cat.social_level >= 3 and char_for_cat.social_level < 6 and not _met_king_this_season:
 			extra_count += 1
 		if char_for_cat.ambition >= 70 and char_for_cat.social_level < 6 and not _ambition_plotted:
@@ -800,6 +804,12 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 		# 晋升之门（四道门资格可视 + 正式请迁）
 		var gate_btn := _make_action_btn("🗝 晋升之门", _show_promotion_gate)
 		vbox.add_child(gate_btn)
+		# 国人生计线：耕作/从军（庶人、士可用）
+		if char_for_cat.social_level <= 3:
+			var farm_btn := _make_action_btn("🌾 耕作（声望+石）", _do_farming, "farm_season")
+			vbox.add_child(farm_btn)
+			var mil_btn := _make_action_btn("⚔ 从军（军功+1）", _do_military_service, "military_season")
+			vbox.add_child(mil_btn)
 		# 朝觐按钮（士及以上，每季一次）
 		if char_for_cat.social_level >= 3 and not _attended_court_this_season:
 			var court_btn := _make_action_btn("🏛 朝觐周王", _on_attend_court)
@@ -1418,25 +1428,13 @@ func _handle_father_inheritance(funeral: Dictionary) -> void:
 		CharacterManager.modify_reputation(char, rep_bonus)
 		_add_log("🏛 继承父亲声望 %d 点（余荫庇佑）。" % rep_bonus)
 
-	# 如果父亲社会等级高于自己，继承爵位/职务
+	# 如果父亲社会等级高于自己，世袭承袭爵位/官职/封地（无衰减）
 	var dad_level = father.get("social_level", 2)
 	if dad_level > char.social_level:
-		char.social_level = dad_level
-		char.social_class = CharacterManager.SOCIAL_CLASSES[dad_level].name
-		var dad_prof = father.get("profession", "")
-		if dad_prof != "":
-			char.profession = dad_prof
-		# 父为诸侯时承袭封地/爵位（防丢封地）
-		if dad_level >= 5:
-			var dad_fief = father.get("fief", "")
-			if not dad_fief.is_empty():
-				char["fief"] = dad_fief
-			var dad_noble = father.get("noble_title", "")
-			if not dad_noble.is_empty():
-				char["noble_title"] = dad_noble
-				char["noble_level"] = father.get("noble_level", 1)
-		_add_log("👑 继承父亲爵位——擢升为%s，承袭职务%s！" % [char.social_class, dad_prof])
-		_add_log("🏛 族人推举你继任家主之位，宗族势力归心。")
+		var heredit = CharacterManager._do_hereditary_succession(char, father)
+		if heredit.get("success", false):
+			_add_log("👑 继承父亲爵位——擢升为%s，承袭职务%s！" % [char.social_class, father.get("profession", "")])
+			_add_log("🏛 族人推举你继任家主之位，宗族势力归心。")
 	elif dad_level == char.social_level:
 		_add_log("🏛 父亲去世，你正式执掌门户。族人以你为家主，宗族声望+5。")
 		CharacterManager.modify_reputation(char, 5)
@@ -4040,7 +4038,7 @@ func _show_promotion_gate() -> void:
 	var char = GameState.current_character
 	if char.is_empty():
 		return
-	var popup := _make_popup("PromotionGate", 250, 280)
+	var popup := _make_popup("PromotionGate", 250, 310)
 	var vbox := _popup_vbox(popup)
 	_add_popup_title(vbox, "🗝 晋升之门")
 
@@ -4057,10 +4055,12 @@ func _show_promotion_gate() -> void:
 		var parts: PackedStringArray = String(sk).split(":")
 		if parts.size() == 2:
 			max_skill = maxi(max_skill, int(parts[1]))
+	var xiangwang = GameState.family_data.get("xiangwang", 0)
 	var ju_label := Label.new()
-	ju_label.text = "🌾 举贤（士→卿大夫）\n    声望≥60：%s   最高技能≥3：%s\n    （乡大夫大比，每三年一期）" % [
+	ju_label.text = "🌾 举贤（士→卿大夫）\n    声望≥60：%s   最高技能≥3：%s\n    乡望：%d/50（三年一大比）" % [
 		"✓" if rep >= 60 else "✗",
-		"✓" if max_skill >= 3 else "✗"
+		"✓" if max_skill >= 3 else "✗",
+		xiangwang
 	]
 	ju_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(ju_label)
@@ -4077,6 +4077,38 @@ func _show_promotion_gate() -> void:
 	]
 	feng_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(feng_label)
+
+	# 举贤/受封动作按钮（按等级显示）
+	if char.social_level == 3:
+		var ju_btn := Button.new()
+		ju_btn.text = "🌾 应乡举大比"
+		ju_btn.custom_minimum_size = Vector2(0, 30)
+		ju_btn.pressed.connect(func():
+			var r = CharacterManager._do_merit_recommendation(char)
+			if r.get("success", false):
+				_add_log("📜 " + r.get("message", ""))
+				_show_promotion_celebration()
+			else:
+				_add_log("🌾 " + r.get("message", ""))
+			popup.queue_free()
+			_refresh_display()
+		)
+		vbox.add_child(ju_btn)
+	if char.social_level == 4:
+		var feng_btn := Button.new()
+		feng_btn.text = "🏰 求王册封（耗王宠30）"
+		feng_btn.custom_minimum_size = Vector2(0, 30)
+		feng_btn.pressed.connect(func():
+			var r = CharacterManager._do_enfeoffment(char)
+			if r.get("success", false):
+				_add_log("🏰 " + r.get("message", ""))
+				_show_promotion_celebration()
+			else:
+				_add_log("🏰 " + r.get("message", ""))
+			popup.queue_free()
+			_refresh_display()
+		)
+		vbox.add_child(feng_btn)
 
 	# ── 历史事件 ──
 	var ev_label := Label.new()
@@ -4124,6 +4156,26 @@ func _gate_heir_text(char: Dictionary) -> String:
 func _game_next_event_text() -> String:
 	"""距下一历史事件窗口（P4-2 铺排前显示暂无大事）"""
 	return "王畿安靖，暂无大事。"
+
+func _do_farming() -> void:
+	"""耕作生计：每季声望+1~2、财富+5~10石"""
+	var char = GameState.current_character
+	var rep = randi_range(1, 2)
+	var grain = randi_range(5, 10)
+	CharacterManager.modify_reputation(char, rep)
+	CharacterManager.modify_wealth(grain)
+	_add_log("🌾 你荷锄下田，勤耕不辍——收成 %d 石，乡里称颂（声望+%d）。" % [grain, rep])
+	_refresh_display()
+
+func _do_military_service() -> void:
+	"""从军生计：军功+1（每季1次，限士及以下）"""
+	var char = GameState.current_character
+	if char.social_level > 3:
+		_add_log("你已有官职在身，不宜轻从行伍。")
+		return
+	CharacterManager.modify_military_merit(char, 1)
+	_add_log("⚔ 你应征从军戍边，操练之余立下汗马功劳——军功+1。")
+	_refresh_display()
 
 # ============================================================
 # 朝觐周王
