@@ -6,7 +6,7 @@ func _ready() -> void:
 	var fails: Array[String] = []
 	var char: Dictionary = CharacterManager.create_character({
 		"name": "昌", "surname": "姬", "clan": "周", "age": 25,
-		"profession": "小吏", "social_level": 1,
+		"profession": "小吏", "social_level": 4,
 		"attr_bonus": {"con": 4, "int": 4, "luk": 6},
 	})
 	GameState.current_character = char
@@ -73,6 +73,18 @@ func _ready() -> void:
 			for tf in tfs2:
 				if not tf.get("is_dowry", false) or tf.get("follows_wife", "") != wife_name2:
 					fails.append("父母之命陪嫁通房缺标记")
+
+	# 5. 低等级（通房名额 0）不送陪嫁通房——受 SPOUSE_LIMITS 约束（审查#5 防绕过等级门槛）
+	var low_char: Dictionary = CharacterManager.create_character({
+		"name": "黎", "surname": "姬", "clan": "周", "age": 25,
+		"profession": "小吏", "social_level": 1,
+	})
+	GameState.current_character = low_char
+	GameState.family_data["wealth"] = 500
+	GameState.family_data["tongfangs"] = []
+	var low_marry = CharacterManager.propose_marriage(low_char, "姜", "齐", 30)
+	if low_marry.get("success", false) and not GameState.family_data.get("tongfangs", []).is_empty():
+		fails.append("低等级娶妻不应有陪嫁通房")
 
 	if fails.is_empty():
 		print("✅ P5-4 陪嫁通房测试通过：成婚陪嫁/随妻标记/自收非陪嫁/妻亡留府或遣散")

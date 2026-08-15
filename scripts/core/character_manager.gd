@@ -845,14 +845,16 @@ func propose_marriage(character: Dictionary, spouse_surname: String, spouse_clan
 				ying["last_affair_year"] = -9999
 				GameState.family_data.ying_qie.append(ying)
 			ying_msg = " 随嫁媵妾%d人——皆%s姓宗女。" % [ying_count, spouse_surname]
-	# 娶妻随嫁——陪房丫鬟（通房）1-2人（4.1）
+	# 娶妻随嫁——陪房丫鬟（通房）受通房名额约束（低等无陪嫁，审查#5）
 	var dowry_msg = ""
 	if not GameState.family_data.has("tongfangs"):
 		GameState.family_data["tongfangs"] = []
-	var dowry_count = 1 + randi_range(0, 1)
+	var tf_limits: int = int(SPOUSE_LIMITS.get(character.social_level, {}).get("tongfang", 0))
+	var dowry_count = mini(1 + randi_range(0, 1), tf_limits)
 	for _dt in range(dowry_count):
 		GameState.family_data.tongfangs.append(_create_dowry_tongfang(character, spouse))
-	dowry_msg = " 陪嫁丫鬟%d人随妻入府。" % dowry_count
+	if dowry_count > 0:
+		dowry_msg = " 陪嫁丫鬟%d人随妻入府。" % dowry_count
 	return {
 		"success": true, "spouse": spouse, "dowry_paid": dowry, "bride_wealth": bride_wealth,
 		"message": "你与%s%s·%s氏结为夫妻！嫁妆 %d 石。%s%s" % [spouse_surname, spouse.name, spouse.clan, bride_wealth, ying_msg, dowry_msg]
@@ -887,14 +889,16 @@ func propose_marriage_parents(character: Dictionary, spouse_surname: String, spo
 				ying["last_affair_year"] = -9999
 				GameState.family_data.ying_qie.append(ying)
 			ying_msg = " 随嫁媵妾%d人——皆%s姓宗女。" % [ying_count, spouse_surname]
-	# 娶妻随嫁——陪房丫鬟（通房）1-2人（4.1）
+	# 娶妻随嫁——陪房丫鬟（通房）受通房名额约束（低等无陪嫁，审查#5）
 	var dowry_msg = ""
 	if not GameState.family_data.has("tongfangs"):
 		GameState.family_data["tongfangs"] = []
-	var dowry_count = 1 + randi_range(0, 1)
+	var tf_limits: int = int(SPOUSE_LIMITS.get(character.social_level, {}).get("tongfang", 0))
+	var dowry_count = mini(1 + randi_range(0, 1), tf_limits)
 	for _dt in range(dowry_count):
 		GameState.family_data.tongfangs.append(_create_dowry_tongfang(character, spouse))
-	dowry_msg = " 陪嫁丫鬟%d人随妻入府。" % dowry_count
+	if dowry_count > 0:
+		dowry_msg = " 陪嫁丫鬟%d人随妻入府。" % dowry_count
 	return {
 		"success": true, "spouse": spouse, "dowry_paid": 0, "bride_wealth": bride_wealth,
 		"message": "父母之命——你与%s%s·%s氏结为夫妻！嫁妆 %d 石。%s%s" % [spouse_surname, spouse.name, spouse.clan, bride_wealth, ying_msg, dowry_msg]
@@ -921,7 +925,11 @@ func _dispose_dowry_tongfangs(character: Dictionary, wife_name: String) -> Array
 	var kept: Array = []
 	for tf in tongfangs:
 		if tf.get("is_dowry", false) and tf.get("follows_wife", "") == wife_name:
-			if randf() < 0.5:
+			if tf.get("is_pregnant", false):
+				# 身怀六甲者不遣散——留府转正式通房，孕期保留（审查#7）
+				tf["is_dowry"] = false
+				notices.append("🤰 陪房丫鬟%s身怀六甲，随留府中，转为正式通房。" % tf.get("name", ""))
+			elif randf() < 0.5:
 				tf["is_dowry"] = false
 				notices.append("☀ 妻亡后陪房丫鬟%s留府，转为正式通房。" % tf.get("name", ""))
 			else:
@@ -1197,14 +1205,16 @@ func _deliver_birth(character: Dictionary, row: Dictionary, mother: Dictionary, 
 	if an_tai:
 		risk *= 0.4
 	var roll = randf() * 100.0
+	# 风险系数参与判定：基准 risk=6 抵消；高龄/体弱右移阈值（更易出事），安胎(×0.4)回落基准
+	var roll_eff = roll + (risk - 6.0)
 	var outcome = "normal"
-	if roll < 3.0:
+	if roll_eff < 3.0:
 		outcome = "stillbirth"       # 死胎
-	elif roll < 8.0:
+	elif roll_eff < 8.0:
 		outcome = "difficult"        # 难产
-	elif roll < 11.0:
+	elif roll_eff < 11.0:
 		outcome = "premature"        # 早产
-	elif roll < 16.0:
+	elif roll_eff < 16.0:
 		outcome = "twins"            # 多胞胎（双胎）
 	# 母体产后损耗（难产额外重创）
 	mother["health"] = clampi(health - 15, 20, 100)
@@ -1891,8 +1901,7 @@ func resolve_sister_event(character: Dictionary, event: Dictionary, choice: int)
 						"relation": "姐妹",
 						"discovered": false,
 					})
-					modify_scandal_level(2)
-					# 标记已乱伦——此后不再触发被动事件（5.3）
+					# 标记已乱伦——此后不再触发被动事件（5.3）；丑闻由末尾 scandal_add 统一应用（审查#8 防叠加）
 					GameState.family_data.get("siblings", [])[i]["has_incest"] = true
 					# 怀孕判定
 					var preg_result = handle_incest_pregnancy(character, i)
@@ -1949,6 +1958,8 @@ func handle_incest_pregnancy(character: Dictionary, sister_index: int) -> Dictio
 		return {"pregnant": false, "message": "双方尚未成年，礼法不容，不可逾越。"}
 	if sister.get("is_pregnant", false):
 		return {"pregnant": false, "message": "她已有身孕，不可再行此事。"}
+	if _sibling_is_married(sister):
+		return {"pregnant": false, "message": "她已远嫁，天各一方。"}
 	var fertility = 8.0  # 基础受孕率8%
 	var cha_bonus = DiceSystem.attr_to_bonus(character.attributes.get("cha", 10))
 	fertility += cha_bonus * 1.0  # CHA加成每点+1%

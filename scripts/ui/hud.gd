@@ -777,10 +777,15 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 		if CharacterManager.get_character_age(char_for_cat) >= 16:
 			if CharacterManager.is_married(char_for_cat):
 				extra_count += 4   # 纳妾/收通房/私会/正妻同房
-			extra_count += GameState.family_data.get("concubines", []).size()
-			extra_count += GameState.family_data.get("furens", []).size()
-			extra_count += GameState.family_data.get("ying_qie", []).size()
-			extra_count += GameState.family_data.get("tongfangs", []).size()
+				if char_for_cat.relationships.get("spouse", {}).get("is_pregnant", false):
+					extra_count += 1   # 正妻安胎按钮（审查#6 防弹窗裁切）
+			# 每名侧室：同房按钮 + 已孕时额外安胎按钮
+			for arr_name in ["concubines", "furens", "ying_qie", "tongfangs"]:
+				var cat_arr: Array = GameState.family_data.get(arr_name, [])
+				for m in cat_arr:
+					extra_count += 1
+					if m.get("is_pregnant", false):
+						extra_count += 1
 
 	var total_actions := actions.size() + extra_count
 	var popup := _make_popup("CatMenu", 100, 60 + total_actions * 32)
@@ -1877,6 +1882,10 @@ func _show_infidelity_popup(notices: Array) -> void:
 				CharacterManager.modify_wealth(-divorce_cost)
 				CharacterManager.modify_reputation(GameState.current_character, -5)
 				if person_type == "wife":
+					# 休妻同妻亡处置陪嫁通房：50%留府/50%遣散（审查#2 防陪嫁永久泄漏）
+					var disp_notices = CharacterManager._dispose_dowry_tongfangs(GameState.current_character, person_name)
+					for dn in disp_notices:
+						_add_log(dn)
 					GameState.current_character.relationships.spouse = {}
 				elif person_type == "tongfang":
 					var tfs = GameState.family_data.get("tongfangs", [])
@@ -5334,6 +5343,12 @@ func _do_try_incest_sister(member_data: Dictionary, sib_idx: int) -> void:
 	var bonus: int = DiceSystem.attr_to_bonus(con)
 	var roll_result: Dictionary = DiceSystem.roll_dice("2d6", bonus, 0)
 	var r: int = roll_result.final_value
+	# CON 掷骰定档：≥8 成事（方走怀孕判定），不足则未遂——让掷骰真正生效（审查#3）
+	if r < 8:
+		_add_log("🌙 你欲对姐%s越礼，她惊惶推开——未能成事。（CON %d -> %d，未遂）" % [sister.get("name", ""), con, r])
+		_mark_acted(cooldown_id)
+		_refresh_display()
+		return
 	sister["has_incest"] = true
 	_add_log("🌙 你与姐%s越礼而行——此乃宗族大忌，天地不容。（CON %d -> %d）" % [sister.get("name", ""), con, r])
 	var preg_result = CharacterManager.handle_incest_pregnancy(char, sib_idx)
@@ -5346,14 +5361,26 @@ func _do_try_incest_sister(member_data: Dictionary, sib_idx: int) -> void:
 	_refresh_display()
 
 func _do_cover_incest_rumor(member_data: Dictionary, sib_idx: int) -> void:
-	"""掩人耳目：花 20 石压低风声"""
+	"""掩人耳目：花 20 石压低风声（self_gated——自身守门+打点）"""
+	var cooldown_id := "cover_rumor_%d" % sib_idx
+	if not _can_act(cooldown_id):
+		_add_log("本季已打点过风声，下季再说吧。")
+		return
 	var result = CharacterManager.cover_incest_rumor(GameState.current_character, sib_idx)
+	if result.get("success", false):
+		_mark_acted(cooldown_id)
 	_add_log(result.get("message", ""))
 	_refresh_display()
 
 func _do_marry_out_sister_incest(member_data: Dictionary, sib_idx: int) -> void:
-	"""异姓远嫁姐姐——风声清零，一劳永逸"""
+	"""异姓远嫁姐姐——风声清零，一劳永逸（self_gated——自身守门+打点）"""
+	var cooldown_id := "marry_sister_%d" % sib_idx
+	if not _can_act(cooldown_id):
+		_add_log("本季已为这位姐妹操办过婚事，下季再说吧。")
+		return
 	var result = CharacterManager.marry_out_sister(GameState.current_character, sib_idx)
+	if result.get("success", false):
+		_mark_acted(cooldown_id)
 	_add_log(result.get("message", ""))
 	_refresh_display()
 func _do_marry_out_daughter(member_data: Dictionary) -> void:

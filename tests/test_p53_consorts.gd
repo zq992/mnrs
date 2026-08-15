@@ -101,24 +101,27 @@ func _ready() -> void:
 		fr1["birth_year"] = GameState.current_year - 60
 		fr1["is_alive"] = true
 		var wife_died = false
+		var furen_died = false
 		for attempt in range(300):
 			var r = CharacterManager.update_parents_aging()
 			for n in r.get("notices", []):
 				if n.find("配偶") >= 0:
 					wife_died = true
+				if n.find("夫人") >= 0:
+					furen_died = true
 			if char.relationships.get("spouse", {}).is_empty():
 				break
 		if not char.relationships.get("spouse", {}).is_empty() or not wife_died:
 			fails.append("正妻老死后应清空配偶位（可再娶）")
-		# 侧室老化死亡：fr1 高龄应逐渐死亡
-		var furen_died = false
-		for attempt in range(300):
-			var r = CharacterManager.update_parents_aging()
-			for n in r.get("notices", []):
-				if n.find("夫人") >= 0:
-					furen_died = true
-			if not fr1.get("is_alive", true):
-				break
+		# 侧室老化死亡：fr1 高龄应逐渐死亡（若首循环已亡则已捕获；否则续推老化直至其亡）
+		if fr1.get("is_alive", true):
+			for attempt in range(300):
+				var r = CharacterManager.update_parents_aging()
+				for n in r.get("notices", []):
+					if n.find("夫人") >= 0:
+						furen_died = true
+				if not fr1.get("is_alive", true):
+					break
 		if not furen_died:
 			fails.append("高龄夫人未老化死亡")
 
