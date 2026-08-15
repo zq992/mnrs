@@ -151,15 +151,15 @@ func _sync_current_dynasty() -> void:
 		_current_dynasty_data = _all_dynasties[saved_id]
 		print("[DynastyManager] 读档恢复朝代: %s" % _current_dynasty_data.get("name", "未知"))
 		return
-	# 2) 当前年份已越过本朝末期 → 自动更替到下一朝代
-	var end_year: int = _current_dynasty_data.get("year_end", 0)
-	if GameState.current_year > end_year:
+	# 2) 当前年份已越过本朝末期 → 自动更替到下一朝代（可连续跨越多个朝代）
+	while GameState.current_year > _current_dynasty_data.get("year_end", 0):
 		var next_id := get_next_dynasty_id()
-		if next_id != "":
-			var old_name: String = _current_dynasty_data.get("name", "未知")
-			_current_dynasty_data = _all_dynasties[next_id]
-			GameState.current_dynasty_id = next_id
-			print("[DynastyManager] 朝代更替: %s → %s" % [old_name, _current_dynasty_data.get("name", "未知")])
+		if next_id == "":
+			break  # 已是最后一朝，保持现状
+		var old_name: String = _current_dynasty_data.get("name", "未知")
+		_current_dynasty_data = _all_dynasties[next_id]
+		GameState.current_dynasty_id = next_id
+		print("[DynastyManager] 朝代更替: %s → %s" % [old_name, _current_dynasty_data.get("name", "未知")])
 
 # ============================================================
 # 地图数据
