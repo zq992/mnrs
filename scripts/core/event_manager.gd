@@ -233,7 +233,14 @@ func resolve_choice(choice_index: int) -> Dictionary:
 	var attr_bonus = DiceSystem.attr_to_bonus(attr_value)
 	var luck_mod = char.get("attributes", {}).get("luk", 10) / 5 - 2  # -1到+2
 
-	var result = DiceSystem.roll_dice(dice_formula, attr_bonus, luck_mod)
+	# 气运点（P2-6）：天命所归——首掷非大成功/成功且气运≥15时，自动重掷一次、消耗2气运。
+	# 复用 DiceSystem.roll_with_fate，不改事件流（resolve_choice 只调一次）。
+	var luk_val: int = char.get("attributes", {}).get("luk", 10)
+	var fate = DiceSystem.roll_with_fate(luk_val, dice_formula, attr_bonus, luck_mod)
+	var result = fate.get("result", {})
+	if fate.get("rerolled", false):
+		CharacterManager.modify_attribute(char, "luk", -int(fate.get("fate_cost", 2)))
+		result["fate_rerolled"] = true
 	var tier_key = _tier_to_key(result.tier)
 
 	# 获取结果描述和效果

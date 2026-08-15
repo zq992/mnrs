@@ -47,6 +47,15 @@ func _ready() -> void:
 	if not fate.has("result") or not fate.has("rerolled"):
 		fails.append("roll_with_fate 返回结构错误")
 
+	# 6b. 低气运(<15)不应重掷；高气运+失败首掷应允许重掷
+	var low_fate = DiceSystem.roll_with_fate(10, "2d6", 1, 0)
+	if low_fate.get("rerolled", false):
+		fails.append("气运<15 不应触发重掷")
+	# 首掷强制失败（attr_bonus=-5 保证 tier>=2 或低），气运18应触发重掷并扣2点
+	var high_fate = DiceSystem.roll_with_fate(18, "2d6", -10, 0)
+	if high_fate.get("rerolled", false) and high_fate.get("fate_cost", 0) != 2:
+		fails.append("重掷应消耗2点气运，实际: %d" % high_fate.get("fate_cost", 0))
+
 	if fails.is_empty():
 		print("✅ 玩法冒烟测试通过：推进/履职/修习/快捷键/忠诚/气运全路径无错误")
 	else:

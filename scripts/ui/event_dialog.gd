@@ -111,12 +111,16 @@ func _on_choice_made(choice_index: int) -> void:
 	# ── 掷骰逐级揭示：先露「?」，再翻点数，最后翻结果段名 ──
 	# 制造「骰子落定 / 卜筮问天」的悬念感（操作反馈 + 轻动效）
 	var roll = result.result
+	var fate_line := ""
+	if roll.get("fate_rerolled", false):
+		fate_line = "[color=#ffcc00]🌀 天命所归！气运重掷，消耗2气运。[/color]\n"
 	result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
 	result_label.text += "掷骰：2d6 = [color=#ffcc00]?[/color]\n"
 	var tw := create_tween()
 	tw.tween_interval(0.4)
 	tw.tween_callback(func():
 		result_label.text = "[color=#c0a060]══════ 掷骰结果 ══════[/color]\n"
+		result_label.text += fate_line
 		result_label.text += "掷骰：2d6 = %d | 属性加值：%d | 最终：%d\n" % [roll.roll_value, roll.attr_bonus, roll.final_value]
 	)
 	tw.tween_interval(0.3)
