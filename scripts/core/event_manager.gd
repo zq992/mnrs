@@ -99,6 +99,9 @@ func check_and_trigger() -> Dictionary:
 		# 冷却——同一事件不会在短时间内重复触发
 		if GameState.current_year - last_triggered < 1:
 			continue
+		# once-ever 守卫：已完成的历史事件不再触发
+		if event.get("once", false) and GameState.completed_timeline_events.has(event_id):
+			continue
 		if not _check_prerequisites(event):
 			continue
 		# 季节限定：声明了 seasons 的事件仅在对应季节出现
@@ -188,28 +191,50 @@ func _weighted_pick(weighted: Array) -> Dictionary:
 # ============================================================
 # 前置条件检查
 # ============================================================
+func _check_single_condition(cond: Dictionary) -> bool:
+	"""单条前置条件判断（事件前置 + 条件式结局共用；未知类型静默放行）"""
+	var char = GameState.current_character
+	match cond.get("type", ""):
+		"min_attribute":
+			return char.get("attributes", {}).get(cond.get("attr", ""), 0) >= cond.get("value", 0)
+		"min_reputation":
+			return char.reputation >= cond.get("value", 0)
+		"social_class":
+			return char.social_class == cond.get("value", "")
+		"min_age":
+			return CharacterManager.get_character_age(char) >= cond.get("value", 0)
+		"min_year":
+			return GameState.current_year >= cond.get("value", 0)
+		"max_year":
+			return GameState.current_year <= cond.get("value", 0)
+		"year_range":
+			var rg = cond.get("value", [])
+			return rg.size() == 2 and GameState.current_year >= rg[0] and GameState.current_year <= rg[1]
+		"min_power":
+			return char.derived.get("power", 0) >= cond.get("value", 0)
+		"min_king_favor":
+			return char.get("king_favor", 0) >= cond.get("value", 0)
+		"min_military_merit":
+			return char.get("military_merit", 0) >= cond.get("value", 0)
+		"min_skill":
+			var sk_val := 0
+			for sk in char.get("skills", []):
+				if String(sk).begins_with(cond.get("skill", "") + ":"):
+					sk_val = maxi(sk_val, int(String(sk).split(":")[1]))
+			return sk_val >= cond.get("value", 0)
+		"has_official_position":
+			return not char.get("official_position", "").is_empty()
+		"social_level":
+			return char.social_level >= cond.get("value", 0)
+	return true
+
 func _check_prerequisites(event: Dictionary) -> bool:
 	var prereqs = event.get("prerequisites", [])
 	if prereqs.is_empty():
 		return true
-
-	var char = GameState.current_character
 	for prereq in prereqs:
-		var type = prereq.get("type", "")
-		match type:
-			"min_attribute":
-				var val = char.get("attributes", {}).get(prereq.get("attr", ""), 0)
-				if val < prereq.get("value", 0):
-					return false
-			"min_reputation":
-				if char.reputation < prereq.get("value", 0):
-					return false
-			"social_class":
-				if char.social_class != prereq.get("value", ""):
-					return false
-			"min_age":
-				if CharacterManager.get_character_age(char) < prereq.get("value", 0):
-					return false
+		if not _check_single_condition(prereq):
+			return false
 	return true
 
 # ============================================================
@@ -246,6 +271,17 @@ func resolve_choice(choice_index: int) -> Dictionary:
 	# 获取结果描述和效果
 	var outcomes = resolution.get("outcomes", {})
 	var description = outcomes.get(tier_key, "事情就这样发生了。")
+	# 条件式结局：outcome 可为 {text, condition, refused}，条件不满足则显示拒绝文案
+	if description is Dictionary:
+		var cond_ok := true
+		for cd in description.get("condition", []):
+			if not _check_single_condition(cd):
+				cond_ok = false
+				break
+		if cond_ok:
+			description = description.get("text", "事情就这样发生了。")
+		else:
+			description = description.get("refused", "你声望尚不足以如此。")
 	var effects_str = choice.get("effects", {}).get(tier_key, "")
 
 	# 应用效果
@@ -257,6 +293,9 @@ func resolve_choice(choice_index: int) -> Dictionary:
 	# 清除当前事件
 	var event_done = _current_event.duplicate()
 	_current_event = {}
+	# once-ever 守卫：once 事件解析后标记完成，不再重复触发
+	if event_done.get("once", false) and not GameState.completed_timeline_events.has(event_done.get("id", "")):
+		GameState.completed_timeline_events.append(event_done.get("id", ""))
 
 	event_resolved.emit(event_done.get("id", ""), {
 		"choice": choice_index,
@@ -307,6 +346,15 @@ func _apply_effects(effects_str: String) -> Array:
 				applied.append({"type": "skill", "name": skill_parts[0], "value": int(skill_parts[1])})
 			continue
 
+		# 赐/夺封地（无 +/- 数字的特殊效果）
+		if part.begins_with("fief_set:"):
+			var place = part.substr(9).strip_edges()
+			if not place.is_empty():
+				var c0 = GameState.current_character
+				c0["fief"] = place
+				applied.append({"type": "fief_set", "value": place})
+			continue
+
 		# 找最后一个 +/- 之后跟数字
 		for op_char in ["+", "-"]:
 			var idx = part.find_last(op_char)
@@ -330,6 +378,21 @@ func _apply_effects(effects_str: String) -> Array:
 						"con", "int", "str", "cha", "vir", "luk":
 							# 六维属性成长——事件 JSON 可驱动天资增减（此前会 push_warning 静默失败）
 							CharacterManager.modify_attribute(char, attr, value)
+						"king_favor":
+							CharacterManager.modify_king_favor(char, value)
+						"military_merit":
+							CharacterManager.modify_military_merit(char, value)
+						"regency_power":
+							CharacterManager.modify_regency_power(char, value)
+						"noble":
+							CharacterManager.advance_noble_title(char)
+						"promote":
+							CharacterManager.grant_promotion(char)
+						"demote":
+							CharacterManager.demote_character(char, maxi(1, value))
+						"social_level":
+							char.social_level = clampi(value, 1, 6)
+							char.social_class = CharacterManager.SOCIAL_CLASSES[char.social_level].name
 						_:
 							push_warning("未知效果属性: %s" % attr)
 

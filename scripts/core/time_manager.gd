@@ -47,6 +47,8 @@ func advance_season() -> int:
 	# 季节从冬回到春时，年份+1
 	if current_season == Season.SPRING and old_season == Season.WINTER:
 		GameState.current_year += 1
+		# 年份+1 时同步年代进度（修复：advance_time 是死 API，era 里程碑此前永不触发）
+		GameState._update_era_progress()
 	season_changed.emit(old_season, current_season, GameState.current_year)
 	return current_season
 

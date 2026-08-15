@@ -678,7 +678,8 @@
           }
         }
       ],
-      "illustration": "res://resources/textures/events/event_court_audience.png"
+      "illustration": "res://resources/textures/events/event_court_audience.png",
+      "once": true
     }
   ]
 }
