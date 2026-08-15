@@ -762,8 +762,7 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 	var extra_count := 0
 	var char_for_cat := GameState.current_character
 	if cat_id == "career" and not char_for_cat.is_empty():
-		if CharacterManager.can_promote(char_for_cat) and char_for_cat.social_level < 6:
-			extra_count += 1
+		extra_count += 1   # 晋升之门（始终显示，资格可视）
 		if char_for_cat.reputation >= 90 and char_for_cat.social_level >= 3 and char_for_cat.social_level < 6 and not _met_king_this_season:
 			extra_count += 1
 		if char_for_cat.ambition >= 70 and char_for_cat.social_level < 6 and not _ambition_plotted:
@@ -798,23 +797,9 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 			vbox.add_child(action_btn)
 
 	if cat_id == "career" and not char_for_cat.is_empty():
-		# Lv1-2: 声望晋升 | Lv3: 需官职 | Lv4-5: 势力晋升
-		var sl = char_for_cat.social_level
-		if sl <= 2 and CharacterManager.can_promote(char_for_cat):
-			var pp_btn := _make_action_btn("📈 请迁（声望已足）", _on_power_promote)
-			vbox.add_child(pp_btn)
-		elif sl == 3:
-			if CharacterManager.can_promote_to_qingdafu(char_for_cat):
-				var pp_btn := _make_action_btn("📈 请迁（官职在身）", _on_power_promote)
-				vbox.add_child(pp_btn)
-			elif CharacterManager.can_promote_by_reputation(char_for_cat):
-				# 声望够但无官职——提示
-				var hint_btn := _make_action_btn("🔒 请迁（需先获得官职）", func(): _add_log("需先在朝中谋得官职方可晋升卿大夫。"))
-				hint_btn.disabled = true
-				vbox.add_child(hint_btn)
-		elif sl >= 4 and CharacterManager.can_promote(char_for_cat) and sl < 6:
-			var pp_btn := _make_action_btn("📈 请迁（势力已足）", _on_power_promote)
-			vbox.add_child(pp_btn)
+		# 晋升之门（四道门资格可视 + 正式请迁）
+		var gate_btn := _make_action_btn("🗝 晋升之门", _show_promotion_gate)
+		vbox.add_child(gate_btn)
 		# 朝觐按钮（士及以上，每季一次）
 		if char_for_cat.social_level >= 3 and not _attended_court_this_season:
 			var court_btn := _make_action_btn("🏛 朝觐周王", _on_attend_court)
@@ -1072,7 +1057,15 @@ func _refresh_display() -> void:
 				alive.append("%s%s(%d岁)" % [c.surname, c.name, ca])
 		if not alive.is_empty():
 			child_text = " | 子女：" + ", ".join(alive)
-	char_clan_label.text = "民族：%s | 姓：%s%s%s" % [char.ethnicity, char.surname, married_text, child_text]
+	var noble_disp = char.get("noble_title", "")
+	if noble_disp == "":
+		noble_disp = "未列侯"
+	char_clan_label.text = "民族：%s | 姓：%s%s%s\n家声：%d · 爵位：%s · %s" % [
+		char.ethnicity, char.surname, married_text, child_text,
+		GameState.family_data.get("reputation", 0),
+		noble_disp,
+		_game_next_event_text()
+	]
 
 	var char_age = CharacterManager.get_character_age(char)
 	char_age_label.text = "年龄：%d岁" % char_age
@@ -4041,6 +4034,96 @@ func _on_reputation_promote() -> void:
 			_add_log("📜 乡老斥责你妄自尊大，声望-5。")
 			CharacterManager.modify_reputation(char, -5)
 	_refresh_display()
+
+func _show_promotion_gate() -> void:
+	"""晋升之门：四道门资格可视 + 正式请迁"""
+	var char = GameState.current_character
+	if char.is_empty():
+		return
+	var popup := _make_popup("PromotionGate", 250, 280)
+	var vbox := _popup_vbox(popup)
+	_add_popup_title(vbox, "🗝 晋升之门")
+
+	# ── 世袭门 ──
+	var heir_label := Label.new()
+	heir_label.text = "🏛 世袭\n    " + _gate_heir_text(char)
+	heir_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(heir_label)
+
+	# ── 举贤门（士→卿大夫）──
+	var rep = char.derived.get("reputation", 0)
+	var max_skill := 0
+	for sk in char.get("skills", []):
+		var parts: PackedStringArray = String(sk).split(":")
+		if parts.size() == 2:
+			max_skill = maxi(max_skill, int(parts[1]))
+	var ju_label := Label.new()
+	ju_label.text = "🌾 举贤（士→卿大夫）\n    声望≥60：%s   最高技能≥3：%s\n    （乡大夫大比，每三年一期）" % [
+		"✓" if rep >= 60 else "✗",
+		"✓" if max_skill >= 3 else "✗"
+	]
+	ju_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(ju_label)
+
+	# ── 受封门（卿→诸侯）──
+	var kf = char.get("king_favor", 20)
+	var mm = char.get("military_merit", 0)
+	var pw = char.derived.get("power", 0)
+	var feng_label := Label.new()
+	feng_label.text = "🏰 受封（卿→诸侯）\n    王宠 %d/60：%s   军功 %d/3：%s   势力 %d/60：%s" % [
+		kf, "✓" if kf >= 60 else "✗",
+		mm, "✓" if mm >= 3 else "✗",
+		pw, "✓" if pw >= 60 else "✗"
+	]
+	feng_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(feng_label)
+
+	# ── 历史事件 ──
+	var ev_label := Label.new()
+	ev_label.text = "📜 历史事件\n    " + _game_next_event_text()
+	ev_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(ev_label)
+
+	# 分隔 + 正式请迁
+	var sep := HSeparator.new()
+	vbox.add_child(sep)
+	var promote_btn := Button.new()
+	promote_btn.text = "📈 正式请迁（资历：士3年/卿5年/诸侯8年）"
+	promote_btn.custom_minimum_size = Vector2(0, 32)
+	promote_btn.pressed.connect(func():
+		popup.queue_free()
+		_on_power_promote()
+	)
+	vbox.add_child(promote_btn)
+	var close_btn := Button.new()
+	close_btn.text = "关闭"
+	close_btn.custom_minimum_size = Vector2(0, 28)
+	close_btn.pressed.connect(popup.queue_free)
+	vbox.add_child(close_btn)
+	add_child(popup)
+
+func _gate_heir_text(char: Dictionary) -> String:
+	"""世袭门：找继承人（先男后女、成人优先）"""
+	var alive: Array = []
+	for c in CharacterManager.get_character_children(char):
+		if c.get("is_alive", true):
+			alive.append(c)
+	var heir = null
+	for c in alive:
+		if c.get("gender", "male") == "male":
+			heir = c
+			break
+	if heir == null and not alive.is_empty():
+		heir = alive[0]
+	if heir == null:
+		return "尚无子嗣，有待后继。"
+	var age = GameState.current_year - heir.birth_year
+	var adult_txt := "成年，可承袭" if age >= 20 else ("%d岁，未及冠" % age)
+	return "嫡嗣 %s%s，%d岁——%s。" % [heir.surname, heir.name, age, adult_txt]
+
+func _game_next_event_text() -> String:
+	"""距下一历史事件窗口（P4-2 铺排前显示暂无大事）"""
+	return "王畿安靖，暂无大事。"
 
 # ============================================================
 # 朝觐周王
