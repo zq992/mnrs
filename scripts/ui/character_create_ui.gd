@@ -108,6 +108,18 @@ const BIRTH_STATES: Array = [
 	{"name": "纪国", "ruler_surname": "姜", "desc": "东方姜姓古国"},
 ]
 
+# ── 各姓常见氏举例（与 surname_option 顺序一致，用于输入框占位与新手提示）──
+const SURNAME_CLAN_EXAMPLES: Array = [
+	["周", "鲁", "郑", "吴"],     # 姬
+	["吕", "齐", "许", "申"],     # 姜
+	["杞", "夏", "曾", "欧阳"],   # 姒
+	["陈", "田", "胡", "袁"],     # 妫
+	["秦", "赵", "徐", "江"],     # 嬴
+	["南燕", "密", "雍"],         # 姞
+	["郧", "罗", "董", "彭"],     # 妘
+	["姚", "虞"],                 # 姚
+]
+
 var _clan_validated: bool = false
 var _state_option: OptionButton = null
 var _reroll_used: bool = false
@@ -139,7 +151,9 @@ func _ready() -> void:
 	clan_hbox.name = "ClanHBox"
 	_clan_input = LineEdit.new()
 	_clan_input.name = "ClanInput"
-	_clan_input.placeholder_text = "输入氏名（如：周、张、司马）"
+	_clan_input.placeholder_text = "输入氏名（如：%s、%s）" % [
+		SURNAME_CLAN_EXAMPLES[0][0], SURNAME_CLAN_EXAMPLES[0][1],
+	]
 	_clan_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clan_hbox.add_child(_clan_input)
 	var validate_btn := Button.new()
@@ -225,15 +239,19 @@ func _ready() -> void:
 	_guide_label.name = "GuideLabel"
 	_guide_label.add_theme_font_size_override("font_size", 13)
 	_guide_label.add_theme_color_override("font_color", Color(0.78, 0.7, 0.48, 1.0))
+	_guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 提示较长时自动换行，避免被裁切
 	vbox.add_child(_guide_label)
 	vbox.move_child(_guide_label, 1)  # 紧跟朝代标题，第一时间可见
 	_refresh_guide()
+	_update_create_button_state()  # 初始状态：氏名未验证，创建按钮置灰，防止无效点击
 
 	# ── 操作流程优化：氏名回车=验证，名字回车=创建；输入改动实时刷新进度 ──
 	_clan_input.text_changed.connect(_on_clan_text_changed)
 	_clan_input.text_submitted.connect(func(_t: String) -> void: _on_validate_clan_pressed())
 	name_input.text_changed.connect(_on_name_text_changed)
-	name_input.text_submitted.connect(func(_t: String) -> void: _on_create_pressed())
+	name_input.text_submitted.connect(func(_t: String) -> void:
+		if not create_button.disabled:
+			_on_create_pressed())  # 就绪后才允许回车创建，避免误触
 	_clan_input.call_deferred("grab_focus")
 
 func _update_clan_options(_index: int) -> void:
@@ -243,17 +261,28 @@ func _update_clan_options(_index: int) -> void:
 func _on_surname_changed(index: int) -> void:
 	_update_clan_options(index)
 	_clan_validated = false  # 换姓后需重新验证
-	info_label.text = "姓氏已变更，请重新验证氏名。"
+	# 换姓后即时更新氏名示例，新手不用盲猜哪个氏对应哪个姓
+	var examples: Array = SURNAME_CLAN_EXAMPLES[index]
+	_clan_input.placeholder_text = "输入氏名（如：%s、%s）" % [examples[0], examples[1]]
+	info_label.text = "姓氏已变更，请输入对应氏名（如%s、%s），按回车或点[验证]。" % [examples[0], examples[1]]
 	_refresh_guide()
+	_update_create_button_state()
 
 func _refresh_guide() -> void:
-	# 新手引导：用 ✓/□ 实时标注创建进度，玩家一眼看清还差哪一步
+	# 新手引导：用 ✓/□ 分步标注进度，并实时提示"下一步该做什么"
 	if _guide_label == null:
 		return
 	var clan_done := _clan_validated
 	var name_done := not name_input.text.strip_edges().is_empty()
-	_guide_label.text = "创建流程：✓选姓 → %s氏名 → ✓出生国 → %s取名 → ✓查看天资" % [
-		"✓" if clan_done else "□", "✓" if name_done else "□",
+	var next_hint := ""
+	if not clan_done:
+		next_hint = "→ 下一步：输入氏名（如周），按回车或点[验证]"
+	elif not name_done:
+		next_hint = "→ 下一步：输入角色名，然后点[创建角色]"
+	else:
+		next_hint = "→ 一切就绪，点[创建角色]进入西周"
+	_guide_label.text = "创建流程：选姓✓ → 氏名%s → 出生国✓ → 取名%s → 天资✓ %s" % [
+		"✓" if clan_done else "□", "✓" if name_done else "□", next_hint,
 	]
 
 func _on_clan_text_changed(_new_text: String) -> void:
@@ -261,9 +290,16 @@ func _on_clan_text_changed(_new_text: String) -> void:
 	if _clan_validated:
 		_clan_validated = false
 	_refresh_guide()
+	_update_create_button_state()
 
 func _on_name_text_changed(_new_text: String) -> void:
 	_refresh_guide()
+	_update_create_button_state()
+
+func _update_create_button_state() -> void:
+	# 创建按钮只在所有必填步骤就绪后点亮，避免无效点击与报错挫败感
+	var ready := _clan_validated and not name_input.text.strip_edges().is_empty()
+	create_button.disabled = not ready
 
 func _validate_clan_basic(clan_text: String) -> String:
 	"""基础格式验证，返回错误信息或空字符串"""
@@ -286,12 +322,14 @@ func _on_validate_clan_pressed() -> void:
 	if not basic_error.is_empty():
 		info_label.text = "氏名格式错误：" + basic_error
 		_clan_validated = false
+		_update_create_button_state()
 		return
 	# 查百家姓 → 八大姓映射
 	var origin: String = CLAN_TO_SURNAME.get(clan, "")
 	if origin.is_empty():
 		info_label.text = "\u2717 验证失败：\u300c" + clan + "\u300d不在百家姓中，或无法追溯至八大姓，无法通过。"
 		_clan_validated = false
+		_update_create_button_state()
 		return
 	# 获取当前选中的姓
 	var surname_names: Array[String] = ["姬", "姜", "姒", "妫", "嬴", "姞", "妘", "姚"]
@@ -300,9 +338,12 @@ func _on_validate_clan_pressed() -> void:
 		info_label.text = "\u2713 验证通过：\u300c" + clan + "\u300d氏 源自 " + surname + "姓。"
 		_clan_validated = true
 		_refresh_guide()
+		_update_create_button_state()
+		name_input.grab_focus()  # 氏名通过后自动跳转取名框，流程顺滑
 	else:
 		info_label.text = "\u2717 验证失败：\u300c" + clan + "\u300d氏 源自 " + origin + "姓，而非 " + surname + "姓。请更换姓氏后重试。"
 		_clan_validated = false
+		_update_create_button_state()
 
 
 func _roll_attributes() -> void:

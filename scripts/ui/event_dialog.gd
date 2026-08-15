@@ -21,6 +21,8 @@ func _ready() -> void:
 	VisualConfig.style_heading_label(title_label, 22)
 	VisualConfig.style_body_label(text_label, 15)
 	VisualConfig.style_button(close_button, 14)
+	# 操作反馈：关闭按钮青铜样式 + 悬停/按下轻动效
+	_style_feedback_button(close_button)
 
 	# 轻动效：面板淡入（青铜浮现）
 	panel.modulate.a = 0.0
@@ -67,6 +69,13 @@ func _ready() -> void:
 		btn.custom_minimum_size = Vector2(600, 40)
 		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		VisualConfig.style_button(btn, 14)
+		_style_feedback_button(btn)
+
+		# 轻动效：选项依次浮现（逐枚"竹简"落下）
+		btn.modulate.a = 0.0
+		var appear := create_tween()
+		appear.tween_interval(0.04 * i)
+		appear.tween_property(btn, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)
 
 		var idx = i
 		btn.pressed.connect(_on_choice_made.bind(idx))
@@ -82,6 +91,15 @@ func _on_choice_made(choice_index: int) -> void:
 	for child in choices_container.get_children():
 		if child is Button:
 			child.disabled = true
+
+	# 操作反馈：高亮被选中的选项（明确"你选了哪个"）
+	var chosen := choices_container.get_child(choice_index) as Button
+	if chosen:
+		var sel := VisualConfig.make_panel_stylebox(VisualConfig.BG_MID_BROWN, VisualConfig.GOLD, 2, 4)
+		chosen.add_theme_stylebox_override("normal", sel)
+		chosen.add_theme_stylebox_override("hover", sel)
+		chosen.add_theme_stylebox_override("pressed", sel)
+		chosen.add_theme_stylebox_override("disabled", sel)
 
 	# 解析骰子
 	var result = EventManager.resolve_choice(choice_index)
@@ -106,6 +124,11 @@ func _on_choice_made(choice_index: int) -> void:
 		result_label.text += "[color=#ffcc00]%s[/color]" % roll.tier_name
 		result_label.text += result.description
 		result_label.text += _effects_text(result.effects)
+		# 轻动效：结果"落定"时微微一顿（骰子定音）
+		result_label.pivot_offset = result_label.size / 2.0
+		result_label.scale = Vector2(0.98, 0.98)
+		var pop := create_tween()
+		pop.tween_property(result_label, "scale", Vector2.ONE, VisualConfig.TWEEN_POPUP_IN)
 		_show_close()
 	)
 
@@ -132,10 +155,14 @@ func show_action_result(action_title: String, body_text: String, dice_result: Di
 	result_label.text += "[color=#ffcc00]%s[/color]" % roll.get("tier_name", "")
 	result_label.text += _effects_text(effects)
 
-	# 轻动效：结果淡入
+	# 轻动效：结果淡入 + 微缩放落定
 	result_label.modulate.a = 0.0
+	result_label.pivot_offset = result_label.size / 2.0
+	result_label.scale = Vector2(0.98, 0.98)
 	var tw := create_tween()
+	tw.set_parallel(true)
 	tw.tween_property(result_label, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)
+	tw.tween_property(result_label, "scale", Vector2.ONE, VisualConfig.TWEEN_POPUP_IN)
 	_show_close()
 
 # ============================================================
@@ -164,3 +191,40 @@ func _show_close() -> void:
 	close_button.modulate.a = 0.0
 	var tw := create_tween()
 	tw.tween_property(close_button, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)
+
+# ============================================================
+# 操作反馈：青铜按钮样式 + 悬停/按下轻动效
+# ============================================================
+func _style_feedback_button(btn: Button) -> void:
+	var styles := VisualConfig.make_button_stylebox()
+	btn.add_theme_stylebox_override("normal", styles["normal"])
+	btn.add_theme_stylebox_override("hover", styles["hover"])
+	btn.add_theme_stylebox_override("pressed", styles["pressed"])
+
+	# 禁用态：压暗铜绿，避免与可选态混淆
+	var disabled := styles["normal"].duplicate() as StyleBoxFlat
+	disabled.bg_color = VisualConfig.BG_MID_BROWN
+	disabled.border_color = Color(VisualConfig.BRONZE, 0.4)
+	btn.add_theme_stylebox_override("disabled", disabled)
+
+	# 缩放锚点跟随控件尺寸（容器布局完成后仍居中缩放）
+	btn.pivot_offset = btn.size / 2.0
+	btn.resized.connect(func(): btn.pivot_offset = btn.size / 2.0)
+
+	# 悬停/按下轻动效
+	btn.mouse_entered.connect(func():
+		var tw := create_tween()
+		tw.tween_property(btn, "scale", Vector2(1.03, 1.03), VisualConfig.TWEEN_HOVER)
+	)
+	btn.mouse_exited.connect(func():
+		var tw := create_tween()
+		tw.tween_property(btn, "scale", Vector2.ONE, VisualConfig.TWEEN_HOVER)
+	)
+	btn.button_down.connect(func():
+		var tw := create_tween()
+		tw.tween_property(btn, "scale", Vector2(0.97, 0.97), VisualConfig.TWEEN_PRESS)
+	)
+	btn.button_up.connect(func():
+		var tw := create_tween()
+		tw.tween_property(btn, "scale", Vector2.ONE, VisualConfig.TWEEN_PRESS)
+	)

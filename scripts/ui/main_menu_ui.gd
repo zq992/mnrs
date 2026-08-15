@@ -11,8 +11,11 @@ func _ready() -> void:
     subtitle_label.text = "西周 · 士族篇"
     version_label.text = "v0.1.0 — 士族开局"
 
-    # 更新按钮样式为高亮，提供更好的视觉反馈
-    start_button.texture = $Resource/start_button_highlight
+    # 按钮视觉反馈：统一铜绿 StyleBox（修复 B1 空引用/Button无texture属性错误）
+    var btn_styles := VisualConfig.make_button_stylebox()
+    start_button.add_theme_stylebox_override("normal", btn_styles["normal"])
+    start_button.add_theme_stylebox_override("hover", btn_styles["hover"])
+    start_button.add_theme_stylebox_override("pressed", btn_styles["pressed"])
 
     # 连接按钮信号
     start_button.pressed.connect(_on_start_pressed)

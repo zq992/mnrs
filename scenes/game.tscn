@@ -190,7 +190,7 @@ offset_top = 680.0
 offset_right = 1270.0
 offset_bottom = 712.0
 theme_override_constants/separation = 5
-alignment = 1
+alignment = 0
 
 [node name="AdvanceBtn" type="Button" parent="BottomBar"]
 layout_mode = 2

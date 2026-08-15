@@ -8,13 +8,16 @@ extends Node
 enum Season { SPRING, SUMMER, AUTUMN, WINTER }
 
 var current_season: int = Season.SPRING
-var month: int = 1  # 当前月 1-12（每季推进3个月：春1→夏4→秋7→冬10）
+var solar_index: int = 0  # 二十四节气全局序号（0=立春 … 23=大寒），季首对齐"立X"
+var month: int = 1  # 当前月 1-12（每气半月、每月两气；季首仍为 春1→夏4→秋7→冬10）
 
 # 季节推进信号：旧季节 / 新季节 / 年份，供节气·节庆·动画订阅
 signal season_changed(old_season: int, new_season: int, year: int)
+# 节气推进信号：旧节气序号 / 新节气序号，供 HUD·事件按节气触发
+signal solar_term_changed(old_index: int, new_index: int)
 
 # ============================================================
-# 二十四节气（按月排列，每季6气，季首即"立春/立夏/立秋/立冬"）
+# 二十四节气（按月排列，每季6气，序号0-23，季首即"立春/立夏/立秋/立冬"）
 # ============================================================
 const SOLAR_TERMS := [
 	"立春", "雨水", "惊蛰", "春分", "清明", "谷雨",
@@ -39,13 +42,30 @@ const SEASON_RITES := {
 func advance_season() -> int:
 	var old_season = current_season
 	current_season = (current_season + 1) % 4
-	# 月份随季节直接对齐（春1→夏4→秋7→冬10），并自愈旧档可能的不同步
-	month = current_season * 3 + 1
+	# 季首节气对齐（立春/立夏/立秋/立冬），月份随之自愈旧档可能的不同步
+	_set_solar_index(current_season * 6)
 	# 季节从冬回到春时，年份+1
 	if current_season == Season.SPRING and old_season == Season.WINTER:
 		GameState.current_year += 1
 	season_changed.emit(old_season, current_season, GameState.current_year)
 	return current_season
+
+# 季内逐气推进（可选）：跨季边界时自动交给 advance_season 统一推进季节/年份
+func advance_solar_term() -> int:
+	var next := (solar_index + 1) % 24
+	if next % 6 == 0:
+		advance_season()
+	else:
+		_set_solar_index(next)
+	return solar_index
+
+# 内部：更新节气序号并同步月份与节气信号（季节推进时也会调用）
+func _set_solar_index(new_index: int) -> void:
+	var old := solar_index
+	solar_index = new_index % 24
+	month = solar_index / 2 + 1  # 每月两气，由节气序号推导 1-12 月
+	if old != solar_index:
+		solar_term_changed.emit(old, solar_index)
 
 func get_season_name() -> String:
 	match current_season:
@@ -65,9 +85,17 @@ func get_season_movement_modifier() -> float:
 # ============================================================
 # 节气查询（二十四节气）
 # ============================================================
-# 当前节气：游戏按"季"推进，故取本季起始节气（立春/立夏/立秋/立冬）
+# 当前节气：默认季首（立春/立夏/立秋/立冬），可经 advance_solar_term 逐气推进
 func get_current_solar_term() -> String:
-	return SOLAR_TERMS[current_season * 6]
+	return SOLAR_TERMS[solar_index]
+
+# 当前节气序号（0-23）
+func get_current_solar_index() -> int:
+	return solar_index
+
+# 按名称查节气序号（未找到返回 -1）
+func get_solar_term_index(term_name: String) -> int:
+	return SOLAR_TERMS.find(term_name)
 
 # 某季全部6个节气（season 缺省为当前季，0春/1夏/2秋/3冬）
 func get_season_solar_terms(season: int = -1) -> Array:
@@ -82,11 +110,23 @@ func get_solar_term_name(index: int) -> String:
 	return SOLAR_TERMS[index]
 
 # ============================================================
-# 节庆查询（四时祭）
+# 节庆查询（四时祭 + 二分二至专祭）
 # ============================================================
-# 当前季节庆，返回 {name, blessing}
+# 节气专祭（二分二至）：春分祭日 / 夏至祭地 / 秋分祭月 / 冬至祭天
+const TERM_RITES := {
+	3:  {"name": "春分·祭日", "blessing": "春分朝日于东郊，顺阴阳而和生"},
+	9:  {"name": "夏至·祭地", "blessing": "夏至祭地于北郊，祈甘雨足百谷"},
+	15: {"name": "秋分·祭月", "blessing": "秋分夕月于西郊，报秋成而致月"},
+	21: {"name": "冬至·祭天", "blessing": "冬至祀天于南郊，一阳来复祈新岁"},
+}
+
+# 当前节庆，返回 {name, blessing}：节气专祭优先，其余回落四时祭
 func get_current_festival() -> Dictionary:
-	return SEASON_RITES.get(current_season, {"name": "", "blessing": ""})
+	return TERM_RITES.get(solar_index, SEASON_RITES.get(current_season, {"name": "", "blessing": ""}))
+
+# 某节气序号的专祭（无则返回空字典）
+func get_term_festival(index: int) -> Dictionary:
+	return TERM_RITES.get(index, {})
 
 # 某季节庆名（season 缺省为当前季）
 func get_festival_name(season: int = -1) -> String:

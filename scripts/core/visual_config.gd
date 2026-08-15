@@ -130,6 +130,18 @@ func style_button(btn: Button, size: int = 15) -> void:
 	btn.add_theme_font_size_override("font_size", size)
 
 
+# ============================================================
+# U-3 共享 StyleBox 缓存：全项目仅 3 个 StyleBoxFlat 实例
+# 替代各处每次新建 make_button_stylebox()（40+ 实例 → 3 个共享）
+# ============================================================
+var _btn_styles_cached: Dictionary = {}
+
+func get_button_stylebox() -> Dictionary:
+	if _btn_styles_cached.is_empty():
+		_btn_styles_cached = make_button_stylebox()
+	return _btn_styles_cached
+
+
 func style_panel(panel: Panel, border_color: Color = BRONZE) -> void:
 	"""为 Panel 节点应用西周面板样式"""
 	panel.add_theme_stylebox_override("panel", make_panel_stylebox(BG_DARK_BROWN, border_color))

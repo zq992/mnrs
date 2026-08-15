@@ -55,6 +55,19 @@ func _tier_description(tier: int) -> String:
 		_: return "事与愿违，情况变得更糟了。"
 
 # ============================================================
+# 气运点重掷（天命所归）：关键掷骰失败时消耗气运再赌一次
+# 气运 ≥15 且首掷非大成功/成功时，可重掷一次，消耗 2 点气运
+# ============================================================
+func roll_with_fate(luk_value: int, dice_formula: String = "2d6",
+                    attr_bonus: int = 0, luck_mod: int = 0) -> Dictionary:
+	var first := roll_dice(dice_formula, attr_bonus, luck_mod)
+	# 气运不足，或首掷已是大成功/成功，直接返回
+	if luk_value < 15 or first.tier <= 1:
+		return {"result": first, "rerolled": false, "fate_cost": 0, "first": {}}
+	var second := roll_dice(dice_formula, attr_bonus, luck_mod)
+	return {"result": second, "rerolled": true, "fate_cost": 2, "first": first}
+
+# ============================================================
 # 属性→骰子加值映射（非线性）
 # ============================================================
 func attr_to_bonus(attr_value: int) -> int:
@@ -76,18 +89,39 @@ func attr_to_bonus(attr_value: int) -> int:
 # ============================================================
 # 直接传「属性原始值」即可完成一次加权判定，内部复用 attr_to_bonus + roll_dice。
 # 返回结构与 roll_dice 完全兼容（tier / roll_value / final_value 平铺可读），
-# 并额外附带 attr_value / difficulty / success / margin 字段，旧调用不受影响。
+# 并额外附带 attr_value / difficulty / success / margin 字段。
 # difficulty：判定难度目标值，默认 7（2d6 均值，普通难度）；<=0 时无门槛，退化为纯加权掷骰。
 # margin：最终值 - 难度，正为成功度（超出多少）、负为失败度（差多少）。
+# 有门槛（difficulty>0）时，tier 按 margin 相对难度重新定级，保证 tier/success/margin 三者自洽；
+# 无门槛时保留 roll_dice 的绝对档位（大成功13 / 成功9 / 部分成功5）。
 func roll_attribute_check(attr_value: int, difficulty: int = 7, luck_mod: int = 0,
                           dice_formula: String = "2d6") -> Dictionary:
 	var attr_bonus = attr_to_bonus(attr_value)                    # 属性 → 加值（非线性映射）
-	var result = roll_dice(dice_formula, attr_bonus, luck_mod)    # 掷骰 → 4 段结果
-	var check = result.duplicate()                                # 铺平旧结果，保持超集兼容
+	var result = roll_dice(dice_formula, attr_bonus, luck_mod)    # 掷骰 → 原始结果
+	var check = result.duplicate()                                # 铺平旧结果，保持键名兼容
 	check["attr_value"] = attr_value
 	check["difficulty"] = difficulty
-	check["success"] = difficulty <= 0 or result.final_value >= difficulty
-	check["margin"] = result.final_value - difficulty
+	# 无门槛：退化为纯加权掷骰，不设成败，margin 归零避免被负难度虚增
+	if difficulty <= 0:
+		check["success"] = true
+		check["margin"] = 0
+		return check
+	# 有门槛：以 margin 相对难度定级，避免「tier=成功 但 success=false」的自相矛盾
+	var margin: int = result.final_value - difficulty
+	check["success"] = margin >= 0
+	check["margin"] = margin
+	var tier: int
+	if margin >= 4:
+		tier = 0    # 大成功：远超目标
+	elif margin >= 0:
+		tier = 1    # 成功：达到目标
+	elif margin >= -2:
+		tier = 2    # 部分成功：差一点达成
+	else:
+		tier = 3    # 失败：明显未达标
+	check["tier"] = tier
+	check["tier_name"] = _tier_name(tier)
+	check["tier_description"] = _tier_description(tier)
 	return check
 
 # ============================================================

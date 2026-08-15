@@ -145,6 +145,17 @@ const AFFECTION_LABELS = {
 	-100: "反目成仇",
 }
 
+# NPC性格特质（轻量性格系统——影响忠诚、出轨倾向、情感波动与心情）
+const PERSONALITY_TRAITS = {
+	"温婉": {"fidelity": 0.6, "loyalty_bias": 5, "swing": 0.8, "mood": "温婉平和", "desc": "性情温和，安于内宅"},
+	"贤淑": {"fidelity": 0.8, "loyalty_bias": 8, "swing": 0.7, "mood": "贤惠恭顺", "desc": "知书达理，恪守妇道"},
+	"刚烈": {"fidelity": 0.2, "loyalty_bias": -4, "swing": 1.5, "mood": "刚烈率性", "desc": "性子刚烈，爱憎分明"},
+	"多情": {"fidelity": -0.5, "loyalty_bias": 0, "swing": 1.3, "mood": "多愁善感", "desc": "多愁善感，易动情愫"},
+	"精明": {"fidelity": 0.1, "loyalty_bias": 0, "swing": 0.9, "mood": "精于盘算", "desc": "工于心计，精于盘算"},
+	"率直": {"fidelity": 0.4, "loyalty_bias": 3, "swing": 1.1, "mood": "心直口快", "desc": "心直口快，喜怒形于色"},
+	"阴郁": {"fidelity": -0.2, "loyalty_bias": -6, "swing": 1.4, "mood": "郁郁寡欢", "desc": "沉默寡言，心思深重"},
+}
+
 # 西周八大姓
 const EIGHT_SURNAMES = ["姬", "姜", "姒", "妫", "嬴", "姞", "妘", "姚"]
 
@@ -598,17 +609,40 @@ func get_eligible_surnames(character: Dictionary) -> Array:
 			eligible.append(s)
 	return eligible
 
+# ============================================================
+# NPC性格辅助
+# ============================================================
+func _generate_personality() -> String:
+	"""随机生成NPC性格"""
+	var keys = PERSONALITY_TRAITS.keys()
+	return keys[randi_range(0, keys.size() - 1)]
+
+func _personality_fidelity_mod(member: Dictionary) -> float:
+	"""性格对出轨概率的修正（正值=更忠诚）"""
+	return PERSONALITY_TRAITS.get(member.get("personality", ""), {}).get("fidelity", 0.0)
+
+func _personality_swing(member: Dictionary) -> float:
+	"""性格对情感波动的放大倍数（>1波动大，<1波动小）"""
+	return PERSONALITY_TRAITS.get(member.get("personality", ""), {}).get("swing", 1.0)
+
+func _personality_loyalty_bias(member: Dictionary) -> int:
+	"""性格带来的忠诚倾向修正"""
+	return PERSONALITY_TRAITS.get(member.get("personality", ""), {}).get("loyalty_bias", 0)
+
 func generate_spouse(surname: String, clan: String, age: int) -> Dictionary:
 	var names_f = ["姬姜", "淑姬", "仲姜", "孟任", "季芈", "伯嬴", "叔妫", "少姚"]
 	var names_m = ["伯同", "仲行", "叔达", "季友", "子服", "公孙", "梁仲", "华父"]
 	var gender = "female" if randf() < 0.5 else "male"
 	var pool = names_f if gender == "female" else names_m
+	var personality = _generate_personality()
+	var loyalty_bias: int = PERSONALITY_TRAITS.get(personality, {}).get("loyalty_bias", 0)
 	return {
 		"name": pool[randi_range(0, pool.size() - 1)],
 		"surname": surname, "clan": clan, "gender": gender,
 		"age": age, "birth_year": GameState.current_year - age, "attributes": _generate_attributes({}),
 		"relation": "spouse",
-		"loyalty": 70 + randi_range(0, 20),
+		"personality": personality,
+		"loyalty": clampi(70 + randi_range(0, 20) + loyalty_bias, 0, 100),
 		"last_affair_year": -9999,
 		"is_pregnant": false,
 		"pregnancy_remaining": 0
@@ -642,7 +676,7 @@ func propose_marriage(character: Dictionary, spouse_surname: String, spouse_clan
 				ying["married_year"] = GameState.current_year
 				ying["is_pregnant"] = false
 				ying["pregnancy_remaining"] = 0
-				ying["loyalty"] = 65 + randi_range(0, 20)
+				ying["loyalty"] = clampi(65 + randi_range(0, 20) + _personality_loyalty_bias(ying), 0, 100)
 				ying["last_affair_year"] = -9999
 				GameState.family_data.ying_qie.append(ying)
 			ying_msg = " 随嫁媵妾%d人——皆%s姓宗女。" % [ying_count, spouse_surname]
@@ -676,7 +710,7 @@ func propose_marriage_parents(character: Dictionary, spouse_surname: String, spo
 				ying["married_year"] = GameState.current_year
 				ying["is_pregnant"] = false
 				ying["pregnancy_remaining"] = 0
-				ying["loyalty"] = 65 + randi_range(0, 20)
+				ying["loyalty"] = clampi(65 + randi_range(0, 20) + _personality_loyalty_bias(ying), 0, 100)
 				ying["last_affair_year"] = -9999
 				GameState.family_data.ying_qie.append(ying)
 			ying_msg = " 随嫁媵妾%d人——皆%s姓宗女。" % [ying_count, spouse_surname]
@@ -801,102 +835,82 @@ func _get_mother_name(mother_type: String, mother_index: int) -> String:
 				return ying_qie[mother_index].get("name", "")
 	return ""
 
-func process_pregnancies(character: Dictionary) -> Array:
-	"""每季推进孕期，分娩时触发。返回通知数组。"""
-	var notices: Array = []
-	# 正妻
+func _consorts_table(character: Dictionary) -> Array:
+	"""统一"母亲类型 → 数据位置 → 标签 → 文案/数值"表。
+	行为与原五段复制代码逐项一致（数值来自 8-11 日报 P2-2 实测对齐）。
+	正妻是单例（spouse），其余是 family_data 列表。"""
+	var rows: Array = []
+	var wife_list: Array = []
 	if is_married(character):
-		var spouse = character.relationships.get("spouse", {})
-		if spouse.get("is_pregnant", false):
-			spouse["pregnancy_remaining"] = spouse.get("pregnancy_remaining", 3) - 1
-			if spouse.pregnancy_remaining <= 0:
-				spouse["is_pregnant"] = false
-				spouse["pregnancy_remaining"] = 0
-				var children = character.relationships.get("children", [])
-				var child = generate_child(character, "wife", 0)
-				children.append(child)
-				character.relationships.children = children
-				if not GameState.family_data.family_tree.has("children"):
-					GameState.family_data.family_tree["children"] = []
-				GameState.family_data.family_tree.children.append(child)
-				notices.append("👶 喜得%s——%s%s！" % ["千金" if child.gender == "female" else "贵子", child.surname, child.name])
-				add_household_event("birth", "正妻诞下" + ("嫡女" if child.gender == "female" else "嫡子") + child.name)
-	# 妾室
-	var concubines = GameState.family_data.get("concubines", [])
-	for i in range(concubines.size()):
-		var cn = concubines[i]
-		if cn.get("is_pregnant", false):
-			cn["pregnancy_remaining"] = cn.get("pregnancy_remaining", 3) - 1
-			if cn.pregnancy_remaining <= 0:
-				cn["is_pregnant"] = false
-				cn["pregnancy_remaining"] = 0
-				var children = character.relationships.get("children", [])
-				var child = generate_child(character, "concubine", i)
-				children.append(child)
-				character.relationships.children = children
-				if not GameState.family_data.family_tree.has("children"):
-					GameState.family_data.family_tree["children"] = []
-				GameState.family_data.family_tree.children.append(child)
-				var mom_name = cn.get("name", "")
-				notices.append("👶 妾室%s喜得%s——%s%s（庶出）！" % [mom_name, "千金" if child.gender == "female" else "贵子", child.surname, child.name])
-				add_household_event("birth", "妾室" + mom_name + "诞下庶出子女")
-	# 通房丫头
-	var tongfangs = GameState.family_data.get("tongfangs", [])
-	for i in range(tongfangs.size()):
-		var tf = tongfangs[i]
-		if tf.get("is_pregnant", false):
-			tf["pregnancy_remaining"] = tf.get("pregnancy_remaining", 3) - 1
-			if tf.pregnancy_remaining <= 0:
-				tf["is_pregnant"] = false
-				tf["pregnancy_remaining"] = 0
-				var children = character.relationships.get("children", [])
-				var child = generate_child(character, "tongfang", i)
-				children.append(child)
-				character.relationships.children = children
-				if not GameState.family_data.family_tree.has("children"):
-					GameState.family_data.family_tree["children"] = []
-				GameState.family_data.family_tree.children.append(child)
-				var mom_name = tf.get("name", "")
-				notices.append("👶 通房丫头%s喜得%s——%s%s（婢生）！" % [mom_name, "千金" if child.gender == "female" else "贵子", child.surname, child.name])
-				add_household_event("birth", "通房" + mom_name + "诞下婢生子")
-	# 夫人（天子专属）
-	var furens = GameState.family_data.get("furens", [])
-	for i in range(furens.size()):
-		var fr = furens[i]
-		if fr.get("is_pregnant", false):
-			fr["pregnancy_remaining"] = fr.get("pregnancy_remaining", 3) - 1
-			if fr.pregnancy_remaining <= 0:
-				fr["is_pregnant"] = false
-				fr["pregnancy_remaining"] = 0
-				var children = character.relationships.get("children", [])
-				var child = generate_child(character, "furen", i)
-				children.append(child)
-				character.relationships.children = children
-				if not GameState.family_data.family_tree.has("children"):
-					GameState.family_data.family_tree["children"] = []
-				GameState.family_data.family_tree.children.append(child)
-				var mom_name = fr.get("name", "")
-				notices.append("👑 夫人%s喜得%s——%s%s（贵子）！" % [mom_name, "千金" if child.gender == "female" else "贵子", child.surname, child.name])
-				add_household_event("birth", "夫人" + mom_name + "诞下贵子")
-	# 媵妾（诸侯专属）
-	var ying_qie = GameState.family_data.get("ying_qie", [])
-	for i in range(ying_qie.size()):
-		var yq = ying_qie[i]
-		if yq.get("is_pregnant", false):
-			yq["pregnancy_remaining"] = yq.get("pregnancy_remaining", 3) - 1
-			if yq.pregnancy_remaining <= 0:
-				yq["is_pregnant"] = false
-				yq["pregnancy_remaining"] = 0
-				var children = character.relationships.get("children", [])
-				var child = generate_child(character, "ying_qie", i)
-				children.append(child)
-				character.relationships.children = children
-				if not GameState.family_data.family_tree.has("children"):
-					GameState.family_data.family_tree["children"] = []
-				GameState.family_data.family_tree.children.append(child)
-				var mom_name = yq.get("name", "")
-				notices.append("🏰 媵妾%s喜得%s——%s%s（媵出）！" % [mom_name, "千金" if child.gender == "female" else "贵子", child.surname, child.name])
-				add_household_event("birth", "媵妾" + mom_name + "诞下媵出子女")
+		var sp = character.relationships.get("spouse", {})
+		if not sp.is_empty():
+			wife_list = [sp]
+	rows.append({
+		"type": "wife", "list": wife_list,
+		"kind_household": "嫡",
+		"notice": "👶 喜得{kind}——{surname}{name}！",
+		"household": "正妻诞下{household_kind}{name}",
+		"base": 0.8, "default_loyalty": 80, "low_inc": 3.0, "mid_inc": 1.5, "cha_inc": 2.0, "penalty": 20,
+	})
+	rows.append({
+		"type": "concubine", "list": GameState.family_data.get("concubines", []),
+		"kind_household": "",
+		"notice": "👶 妾室{mom}喜得{kind}——{surname}{name}（庶出）！",
+		"household": "妾室{mom}诞下庶出子女",
+		"base": 1.5, "default_loyalty": 60, "low_inc": 3.0, "mid_inc": 1.5, "cha_inc": 2.0, "penalty": 20,
+	})
+	rows.append({
+		"type": "tongfang", "list": GameState.family_data.get("tongfangs", []),
+		"kind_household": "",
+		"notice": "👶 通房丫头{mom}喜得{kind}——{surname}{name}（婢生）！",
+		"household": "通房{mom}诞下婢生子",
+		"base": 2.0, "default_loyalty": 50, "low_inc": 4.0, "mid_inc": 2.0, "cha_inc": 2.5, "penalty": 15,
+	})
+	rows.append({
+		"type": "furen", "list": GameState.family_data.get("furens", []),
+		"kind_household": "",
+		"notice": "👑 夫人{mom}喜得{kind}——{surname}{name}（贵子）！",
+		"household": "夫人{mom}诞下贵子",
+		"base": 0.5, "default_loyalty": 85, "low_inc": 2.0, "mid_inc": 1.0, "cha_inc": 1.5, "penalty": 15,
+	})
+	rows.append({
+		"type": "ying_qie", "list": GameState.family_data.get("ying_qie", []),
+		"kind_household": "",
+		"notice": "🏰 媵妾{mom}喜得{kind}——{surname}{name}（媵出）！",
+		"household": "媵妾{mom}诞下媵出子女",
+		"base": 1.0, "default_loyalty": 70, "low_inc": 2.5, "mid_inc": 1.5, "cha_inc": 2.0, "penalty": 15,
+	})
+	return rows
+
+func process_pregnancies(character: Dictionary) -> Array:
+	"""每季推进孕期，分娩时触发。返回通知数组。（表驱动，行为与原5段一致）"""
+	var notices: Array = []
+	for row in _consorts_table(character):
+		for i in range(row.list.size()):
+			var mother = row.list[i]
+			if not mother.get("is_pregnant", false):
+				continue
+			mother["pregnancy_remaining"] = mother.get("pregnancy_remaining", 3) - 1
+			if mother.pregnancy_remaining > 0:
+				continue
+			mother["is_pregnant"] = false
+			mother["pregnancy_remaining"] = 0
+			var children = character.relationships.get("children", [])
+			var child = generate_child(character, row.type, i)
+			children.append(child)
+			character.relationships.children = children
+			if not GameState.family_data.family_tree.has("children"):
+				GameState.family_data.family_tree["children"] = []
+			GameState.family_data.family_tree.children.append(child)
+			var kind = "千金" if child.gender == "female" else "贵子"
+			var household_kind = ("嫡女" if child.gender == "female" else "嫡子") if row.kind_household == "嫡" else ""
+			var mom = mother.get("name", "")
+			notices.append(row.notice.format({
+				"kind": kind, "surname": child.surname, "name": child.name, "mom": mom
+			}))
+			add_household_event("birth", row.household.format({
+				"mom": mom, "household_kind": household_kind, "name": child.name, "kind": kind
+			}))
 	return notices
 
 func generate_child(character: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> Dictionary:
@@ -955,6 +969,7 @@ func generate_child(character: Dictionary, mother_type: String = "wife", mother_
 		"age": 0,
 		"attributes": attrs,
 		"is_alive": true,
+		"personality": _generate_personality(),
 		"mother_type": mother_type,
 		"mother_index": mother_index,
 		"birth_order": birth_order,
@@ -1020,15 +1035,16 @@ func boost_spouse_loyalty(character: Dictionary) -> Dictionary:
 	var boost = 0
 	var msg = ""
 	match tier:
-		0: boost = 30; msg = "妻子感动不已，忠诚+30！"
-		1: boost = 20; msg = "妻子心花怒放，忠诚+20。"
-		2: boost = 15; msg = "妻子颇为欢喜，忠诚+15。"
-		3: boost = 8; msg = "妻子稍感欣慰，忠诚+8。"
+		0: boost = 30; msg = "妻子感动不已"
+		1: boost = 20; msg = "妻子心花怒放"
+		2: boost = 15; msg = "妻子颇为欢喜"
+		3: boost = 8; msg = "妻子稍感欣慰"
+	boost = int(round(boost * _personality_swing(spouse)))  # 性格影响受赠反应
 	var new_loyalty = min(100, old_loyalty + boost)
 	spouse["loyalty"] = new_loyalty
 	CharacterManager.modify_wealth(-cost)
 	return {"success": true, "old_loyalty": old_loyalty, "new_loyalty": new_loyalty,
-		"cost": cost, "message": msg + " 花费%d石。" % cost}
+		"cost": cost, "message": "%s，忠诚+%d。花费%d石。" % [msg, boost, cost]}
 
 func can_take_concubine(character: Dictionary) -> Dictionary:
 	"""检查是否可以纳妾。返回 {can: bool, reason: str, max_count: int, cost: int}"""
@@ -1092,7 +1108,7 @@ func take_tongfang(character: Dictionary, surname: String, clan: String, cost: i
 	tf["married_year"] = GameState.current_year
 	tf["is_pregnant"] = false
 	tf["pregnancy_remaining"] = 0
-	tf["loyalty"] = 60 + randi_range(0, 20)
+	tf["loyalty"] = clampi(60 + randi_range(0, 20) + _personality_loyalty_bias(tf), 0, 100)
 	tf["last_affair_year"] = -9999
 	if not GameState.family_data.has("tongfangs"):
 		GameState.family_data["tongfangs"] = []
@@ -1127,7 +1143,7 @@ func take_furen(character: Dictionary, surname: String, clan: String, cost: int)
 	furen["married_year"] = GameState.current_year
 	furen["is_pregnant"] = false
 	furen["pregnancy_remaining"] = 0
-	furen["loyalty"] = 75 + randi_range(0, 15)
+	furen["loyalty"] = clampi(75 + randi_range(0, 15) + _personality_loyalty_bias(furen), 0, 100)
 	furen["last_affair_year"] = -9999
 	if not GameState.family_data.has("furens"):
 		GameState.family_data["furens"] = []
@@ -1163,88 +1179,26 @@ func is_incestuous(char: Dictionary, target: Dictionary) -> Dictionary:
 
 func check_spouse_fidelity(character: Dictionary) -> Array:
 	"""每季检测配偶和妾室的忠诚度。返回出轨通知列表 [{person, type, name, discovered}]。
-	BUGFIX: luck_mod 10→0, 概率大幅降低, tier阈值修正"""
+	BUGFIX: luck_mod 10→0, 概率大幅降低, tier阈值修正。
+	表驱动：数值与行为与原五段实现逐项一致（见 _consorts_table）。"""
 	var notices: Array = []
 	var int_bonus: int = DiceSystem.attr_to_bonus(character.attributes.get("int", 10))
-	# 检测正妻
-	if is_married(character):
-		var spouse = character.relationships.get("spouse", {})
-		if not spouse.is_empty() and spouse.get("is_alive", true):
-			var base_chance: float = 0.8  # 0.8% (曾3%)
-			var loyalty = spouse.get("loyalty", 80)
-			if loyalty < 30: base_chance += 3.0
-			elif loyalty < 50: base_chance += 1.5
-			if character.attributes.get("cha", 10) < 10: base_chance += 2.0
+	for row in _consorts_table(character):
+		for mother in row.list:
+			if mother.is_empty() or not mother.get("is_alive", true):
+				continue
+			var base_chance: float = row.base
+			var loyalty = mother.get("loyalty", row.default_loyalty)
+			if loyalty < 30: base_chance += row.low_inc
+			elif loyalty < 50: base_chance += row.mid_inc
+			if character.attributes.get("cha", 10) < 10: base_chance += row.cha_inc
+			base_chance -= _personality_fidelity_mod(mother) * 2.0  # 性格修正出轨倾向
 			if randf() * 100.0 < base_chance:
-				spouse["last_affair_year"] = GameState.current_year
-				spouse["loyalty"] = max(0, loyalty - 20)  # -20 (曾-30)
+				mother["last_affair_year"] = GameState.current_year
+				mother["loyalty"] = max(0, loyalty - int(row.penalty * _personality_swing(mother)))
 				var roll = DiceSystem.roll_dice("2d6", int_bonus, 0)  # BUGFIX: luck_mod=0 (曾10)
 				var discovered: bool = roll.tier <= 1  # tier 0-1 = 发现 (曾tier>=2)
-				notices.append({"person": spouse, "type": "wife", "name": spouse.get("name", ""), "discovered": discovered})
-	# 检测每位妾室
-	var concubines = GameState.family_data.get("concubines", [])
-	for cn in concubines:
-		if cn.is_empty() or not cn.get("is_alive", true):
-			continue
-		var base_chance: float = 1.5  # 1.5% (曾15%)
-		var loyalty = cn.get("loyalty", 60)
-		if loyalty < 30: base_chance += 3.0
-		elif loyalty < 50: base_chance += 1.5
-		if character.attributes.get("cha", 10) < 10: base_chance += 2.0
-		if randf() * 100.0 < base_chance:
-			cn["last_affair_year"] = GameState.current_year
-			cn["loyalty"] = max(0, loyalty - 20)
-			var roll = DiceSystem.roll_dice("2d6", int_bonus, 0)
-			var discovered: bool = roll.tier <= 1
-			notices.append({"person": cn, "type": "concubine", "name": cn.get("name", ""), "discovered": discovered})
-	# 检测每位通房丫头
-	var tongfangs = GameState.family_data.get("tongfangs", [])
-	for tf in tongfangs:
-		if tf.is_empty() or not tf.get("is_alive", true):
-			continue
-		var base_chance: float = 2.0
-		var loyalty = tf.get("loyalty", 50)
-		if loyalty < 30: base_chance += 4.0
-		elif loyalty < 50: base_chance += 2.0
-		if character.attributes.get("cha", 10) < 10: base_chance += 2.5
-		if randf() * 100.0 < base_chance:
-			tf["last_affair_year"] = GameState.current_year
-			tf["loyalty"] = max(0, loyalty - 15)
-			var roll = DiceSystem.roll_dice("2d6", int_bonus, 0)
-			var discovered: bool = roll.tier <= 1
-			notices.append({"person": tf, "type": "tongfang", "name": tf.get("name", ""), "discovered": discovered})
-	# 检测每位夫人（天子后宫）
-	var furens = GameState.family_data.get("furens", [])
-	for fr in furens:
-		if fr.is_empty() or not fr.get("is_alive", true):
-			continue
-		var base_chance: float = 0.5  # 夫人地位高，出轨率低
-		var loyalty = fr.get("loyalty", 85)
-		if loyalty < 30: base_chance += 2.0
-		elif loyalty < 50: base_chance += 1.0
-		if character.attributes.get("cha", 10) < 10: base_chance += 1.5
-		if randf() * 100.0 < base_chance:
-			fr["last_affair_year"] = GameState.current_year
-			fr["loyalty"] = max(0, loyalty - 15)
-			var roll = DiceSystem.roll_dice("2d6", int_bonus, 0)
-			var discovered: bool = roll.tier <= 1
-			notices.append({"person": fr, "type": "furen", "name": fr.get("name", ""), "discovered": discovered})
-	# 检测每位媵妾（诸侯侧室）
-	var ying_qie = GameState.family_data.get("ying_qie", [])
-	for yq in ying_qie:
-		if yq.is_empty() or not yq.get("is_alive", true):
-			continue
-		var base_chance: float = 1.0
-		var loyalty = yq.get("loyalty", 70)
-		if loyalty < 30: base_chance += 2.5
-		elif loyalty < 50: base_chance += 1.5
-		if character.attributes.get("cha", 10) < 10: base_chance += 2.0
-		if randf() * 100.0 < base_chance:
-			yq["last_affair_year"] = GameState.current_year
-			yq["loyalty"] = max(0, loyalty - 15)
-			var roll = DiceSystem.roll_dice("2d6", int_bonus, 0)
-			var discovered: bool = roll.tier <= 1
-			notices.append({"person": yq, "type": "ying_qie", "name": yq.get("name", ""), "discovered": discovered})
+				notices.append({"person": mother, "type": row.type, "name": mother.get("name", ""), "discovered": discovered})
 	return notices
 
 # ============================================================
@@ -1261,31 +1215,31 @@ func get_household_members(char: Dictionary) -> Array:
 		var sp = char.relationships.get("spouse", {})
 		if not sp.is_empty():
 			var sp_age = GameState.current_year - sp.get("birth_year", GameState.current_year)
-			members.append({"id": "wife", "name": sp.get("name", ""), "surname": sp.get("surname", ""), "type": "正妻", "age": sp_age, "mood": _get_member_mood(sp, "wife"), "pregnant": sp.get("is_pregnant", false)})
+			members.append({"id": "wife", "name": sp.get("name", ""), "surname": sp.get("surname", ""), "type": "正妻", "age": sp_age, "mood": _get_member_mood(sp, "wife"), "pregnant": sp.get("is_pregnant", false), "personality": sp.get("personality", "")})
 	# 夫人
 	var furens = GameState.family_data.get("furens", [])
 	for i in range(furens.size()):
 		var fr = furens[i]
 		var fr_age = GameState.current_year - fr.get("birth_year", GameState.current_year)
-		members.append({"id": "furen_%d" % i, "name": fr.get("name", ""), "surname": fr.get("surname", ""), "type": "夫人", "age": fr_age, "mood": _get_member_mood(fr, "furen"), "pregnant": fr.get("is_pregnant", false)})
+		members.append({"id": "furen_%d" % i, "name": fr.get("name", ""), "surname": fr.get("surname", ""), "type": "夫人", "age": fr_age, "mood": _get_member_mood(fr, "furen"), "pregnant": fr.get("is_pregnant", false), "personality": fr.get("personality", "")})
 	# 媵妾
 	var ying_qie = GameState.family_data.get("ying_qie", [])
 	for i in range(ying_qie.size()):
 		var yq = ying_qie[i]
 		var yq_age = GameState.current_year - yq.get("birth_year", GameState.current_year)
-		members.append({"id": "ying_%d" % i, "name": yq.get("name", ""), "surname": yq.get("surname", ""), "type": "媵妾", "age": yq_age, "mood": _get_member_mood(yq, "ying_qie"), "pregnant": yq.get("is_pregnant", false)})
+		members.append({"id": "ying_%d" % i, "name": yq.get("name", ""), "surname": yq.get("surname", ""), "type": "媵妾", "age": yq_age, "mood": _get_member_mood(yq, "ying_qie"), "pregnant": yq.get("is_pregnant", false), "personality": yq.get("personality", "")})
 	# 妾室
 	var concubines = GameState.family_data.get("concubines", [])
 	for i in range(concubines.size()):
 		var cn = concubines[i]
 		var cn_age = GameState.current_year - cn.get("birth_year", GameState.current_year)
-		members.append({"id": "concubine_%d" % i, "name": cn.get("name", ""), "surname": cn.get("surname", ""), "type": "妾室", "age": cn_age, "mood": _get_member_mood(cn, "concubine"), "pregnant": cn.get("is_pregnant", false)})
+		members.append({"id": "concubine_%d" % i, "name": cn.get("name", ""), "surname": cn.get("surname", ""), "type": "妾室", "age": cn_age, "mood": _get_member_mood(cn, "concubine"), "pregnant": cn.get("is_pregnant", false), "personality": cn.get("personality", "")})
 	# 通房
 	var tongfangs = GameState.family_data.get("tongfangs", [])
 	for i in range(tongfangs.size()):
 		var tf = tongfangs[i]
 		var tf_age = GameState.current_year - tf.get("birth_year", GameState.current_year)
-		members.append({"id": "tongfang_%d" % i, "name": tf.get("name", ""), "surname": tf.get("surname", ""), "type": "通房", "age": tf_age, "mood": _get_member_mood(tf, "tongfang"), "pregnant": tf.get("is_pregnant", false)})
+		members.append({"id": "tongfang_%d" % i, "name": tf.get("name", ""), "surname": tf.get("surname", ""), "type": "通房", "age": tf_age, "mood": _get_member_mood(tf, "tongfang"), "pregnant": tf.get("is_pregnant", false), "personality": tf.get("personality", "")})
 	# 子女
 	var children = char.relationships.get("children", [])
 	for i in range(children.size()):
@@ -1293,22 +1247,22 @@ func get_household_members(char: Dictionary) -> Array:
 		if ch.get("is_alive", true) and not ch.get("is_separated", false):
 			var ch_age = GameState.current_year - ch.get("birth_year", GameState.current_year)
 			var ch_type = "嫡子" if (ch.gender == "male" and ch.get("mother_type", "") == "wife") else ("嫡女" if ch.gender == "female" and ch.get("mother_type", "") == "wife" else ("庶子" if ch.gender == "male" else "庶女"))
-			members.append({"id": "child_%d" % i, "name": ch.get("name", ""), "surname": ch.get("surname", ""), "type": ch_type, "age": ch_age, "mood": _get_member_mood(ch, "child"), "heir": ch.get("is_heir", false), "education": ch.get("education_focus", "")})
+			members.append({"id": "child_%d" % i, "name": ch.get("name", ""), "surname": ch.get("surname", ""), "type": ch_type, "age": ch_age, "mood": _get_member_mood(ch, "child"), "heir": ch.get("is_heir", false), "education": ch.get("education_focus", ""), "personality": ch.get("personality", "")})
 	# 父母
 	var parents = GameState.family_data.get("parents", {})
 	if not parents.is_empty():
 		var father = parents.get("father", {})
 		if not father.is_empty() and father.get("is_alive", true):
 			var f_age = GameState.current_year - father.get("birth_year", GameState.current_year)
-			members.append({"id": "father", "name": father.get("name", ""), "type": "父亲", "age": f_age, "mood": _get_member_mood(father, "parent")})
+			members.append({"id": "father", "name": father.get("name", ""), "type": "父亲", "age": f_age, "mood": _get_member_mood(father, "parent"), "personality": father.get("personality", "")})
 		var mother = parents.get("mother", {})
 		if not mother.is_empty() and mother.get("is_alive", true):
 			var m_age = GameState.current_year - mother.get("birth_year", GameState.current_year)
-			members.append({"id": "mother", "name": mother.get("name", ""), "type": "母亲", "age": m_age, "mood": _get_member_mood(mother, "parent")})
+			members.append({"id": "mother", "name": mother.get("name", ""), "type": "母亲", "age": m_age, "mood": _get_member_mood(mother, "parent"), "personality": mother.get("personality", "")})
 	return members
 
 func _get_member_mood(member: Dictionary, member_type: String) -> String:
-	"""根据忠诚度/状态返回成员心情"""
+	"""根据忠诚度/性格返回成员心情"""
 	if member_type == "child":
 		return "活泼" if randf() < 0.7 else "调皮"
 	if member_type == "parent":
@@ -1318,11 +1272,15 @@ func _get_member_mood(member: Dictionary, member_type: String) -> String:
 	var loyalty = member.get("loyalty", 70)
 	var pregnant = member.get("is_pregnant", false)
 	if pregnant: return "安胎中"
-	if loyalty >= 80: return "愉悦"
-	if loyalty >= 60: return "平和"
-	if loyalty >= 40: return "不满"
-	if loyalty >= 20: return "怨怼"
-	return "离心"
+	if loyalty < 40:
+		return "怨怼" if loyalty >= 20 else "离心"
+	if loyalty < 60:
+		return "不满"
+	# 忠诚尚可——性格主导日常心情
+	var pers_mood = PERSONALITY_TRAITS.get(member.get("personality", ""), {}).get("mood", "")
+	if pers_mood != "":
+		return pers_mood
+	return "愉悦" if loyalty >= 80 else "平和"
 
 func calculate_household_harmony(char: Dictionary) -> int:
 	"""计算家庭和睦度（0-100），每季调用"""
@@ -1356,7 +1314,7 @@ func calculate_household_harmony(char: Dictionary) -> int:
 	# 怀孕加分
 	var preg_count = 0
 	var spouse = char.relationships.get("spouse", {})
-	if spouse.get("is_pregnant", false): preg_count += 1
+	if spouse != null and spouse.get("is_pregnant", false): preg_count += 1
 	for arr2 in [GameState.family_data.get("concubines", []), GameState.family_data.get("furens", []), GameState.family_data.get("ying_qie", []), GameState.family_data.get("tongfangs", [])]:
 		for cn in arr2:
 			if cn.get("is_pregnant", false): preg_count += 1
@@ -2098,6 +2056,7 @@ func generate_parents(child_surname: String) -> Dictionary:
 		"birth_year": GameState.current_year - father_age,
 		"is_alive": true,
 		"profession": SHI_PROFESSIONS[randi_range(0, SHI_PROFESSIONS.size() - 1)].id,
+		"personality": _generate_personality(),
 	}
 	# 母亲必须异姓（同姓不婚）
 	var mother_surnames = []
@@ -2113,6 +2072,7 @@ func generate_parents(child_surname: String) -> Dictionary:
 		"age": mother_age,
 		"birth_year": GameState.current_year - mother_age,
 		"is_alive": true,
+		"personality": _generate_personality(),
 	}
 	return {"father": father, "mother": mother, "family_wealth": 40 + randi_range(0, 80)}
 
@@ -2174,7 +2134,8 @@ func generate_siblings(child_surname: String, father_age: int, mother_age: int) 
 			"age": age_val,
 			"birth_year": GameState.current_year - age_val,
 			"is_alive": randf() > 0.05,  # 5% 夭折率
-			"relation": "兄" if gender == "male" else "姐"
+			"relation": "兄" if gender == "male" else "姐",
+			"personality": _generate_personality(),
 		}
 		siblings.append(sibling)
 
@@ -2200,19 +2161,23 @@ func get_sibling_kinship(sibling: Dictionary, player_age: int) -> String:
 # ============================================================
 
 func get_sibling_affection(sibling_index: int) -> int:
-	"""获取指定兄弟姐妹对玩家的好感度"""
+	"""获取指定兄弟姐妹对玩家的好感度（未初始化默认中性30）"""
 	var key = "sibling_%d" % sibling_index
 	var relations = GameState.household_data.get("member_relations", {})
 	if not relations.has(key):
-		return 0
-	return relations[key].get("self", 0)
+		return 30
+	return relations[key].get("self", 30)
 
 func modify_sibling_affection(sibling_index: int, delta: int) -> void:
-	"""修改好感度，钳制在 -100~100"""
+	"""修改好感度，钳制在 -100~100。性格影响情感波动幅度。"""
 	var key = "sibling_%d" % sibling_index
 	var relations = GameState.household_data.get("member_relations", {})
 	if not relations.has(key):
 		relations[key] = {"self": 0}
+	# 性格放大/缩小好感度变化
+	var sibs = GameState.family_data.get("siblings", [])
+	if sibling_index >= 0 and sibling_index < sibs.size():
+		delta = int(round(delta * _personality_swing(sibs[sibling_index])))
 	var current = relations[key].get("self", 0)
 	relations[key]["self"] = clampi(current + delta, -100, 100)
 	GameState.household_data["member_relations"] = relations
@@ -2235,11 +2200,21 @@ func get_affection_label(value: int) -> String:
 	return label
 
 func init_sibling_affection(sibling_index: int) -> void:
-	"""为新兄弟姐妹初始化好感度（40-60）"""
+	"""为新兄弟姐妹初始化好感度（40-60），年长/同性略高"""
 	var key = "sibling_%d" % sibling_index
 	var relations = GameState.household_data.get("member_relations", {})
 	if not relations.has(key):
-		relations[key] = {"self": 40 + randi_range(0, 20)}
+		var base = 40 + randi_range(0, 20)
+		# 长幼相敬——年长手足初始更亲近；同性手足天然亲近
+		var sibs = GameState.family_data.get("siblings", [])
+		if sibling_index >= 0 and sibling_index < sibs.size():
+			var char = GameState.current_character
+			if typeof(char) == TYPE_DICTIONARY and not char.is_empty():
+				if _compute_age(sibs[sibling_index]) > get_character_age(char):
+					base += 5
+				if sibs[sibling_index].get("gender", "") == char.get("gender", "male"):
+					base += 3
+		relations[key] = {"self": clampi(base, 0, 100)}
 		GameState.household_data["member_relations"] = relations
 
 func _sibling_is_married(sibling: Dictionary) -> bool:

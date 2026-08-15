@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3 uid="uid://b2xcs34bvrlbc"]
+[gd_scene load_steps=5 format=3 uid="uid://b2xcs34bvrlbc"]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu_ui.gd" id="1_mainmenu"]
+[ext_resource type="Texture2D" path="res://resources/textures/backgrounds/city_haojing.png" id="2_bg"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_title"]
 size = 48
@@ -24,6 +25,15 @@ layout_mode = 0
 offset_right = 1280.0
 offset_bottom = 720.0
 color = Color(0.102, 0.078, 0.063, 1)
+
+[node name="BgTexture" type="TextureRect" parent="."]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(0.45, 0.45, 0.45, 1)
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1

@@ -45,6 +45,9 @@ var _auto_mode: bool = false
 var _auto_timer: Timer = null
 
 var _cooldowns: Dictionary = {}
+var _last_work_mode: String = ""    # 记忆上次履职强度（一键复用）
+var _last_study_mode: String = ""   # 记忆上次修习方式（一键复用）
+var _last_study_skill: String = ""  # 记忆上次修习技能（一键复用）
 
 # 志向系统
 const AMBITIONS: Dictionary = {
@@ -168,12 +171,14 @@ func _ready() -> void:
 		ritual_btn, travel_btn, hunt_btn, market_btn, teach_btn,
 		rest_btn, menu_btn, ask_parents_btn, auto_btn
 	]
-	var btn_styles := VisualConfig.make_button_stylebox()
+	var btn_styles := VisualConfig.get_button_stylebox()   # U-3 共享缓存，避免40+ StyleBox 实例
 	for btn in all_btns:
 		VisualConfig.style_button(btn, 13)
 		btn.add_theme_stylebox_override("normal", btn_styles["normal"])
 		btn.add_theme_stylebox_override("hover", btn_styles["hover"])
 		btn.add_theme_stylebox_override("pressed", btn_styles["pressed"])
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # U-4 均分剩余空间，防溢出
+		_bind_feedback(btn)
 
 	# 进度条应用纯色样式（按语义配色，无需纹理）
 	VisualConfig.style_progress_bar(health_bar, VisualConfig.BAR_HEALTH)
@@ -197,11 +202,13 @@ func _ready() -> void:
 	_recruit_troops_btn.text = "⚔ 募兵"
 	_recruit_troops_btn.custom_minimum_size = Vector2(90, 32)
 	VisualConfig.style_button(_recruit_troops_btn, 13)
-	var rt_styles := VisualConfig.make_button_stylebox()
+	var rt_styles := VisualConfig.get_button_stylebox()   # U-3 共享缓存
 	_recruit_troops_btn.add_theme_stylebox_override("normal", rt_styles["normal"])
 	_recruit_troops_btn.add_theme_stylebox_override("hover", rt_styles["hover"])
 	_recruit_troops_btn.add_theme_stylebox_override("pressed", rt_styles["pressed"])
 	_recruit_troops_btn.pressed.connect(_on_recruit_troops)
+	_recruit_troops_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # U-4 均分，防溢出
+	_bind_feedback(_recruit_troops_btn)
 	var bb = $BottomBar
 	bb.add_child(_recruit_troops_btn)
 	bb.move_child(_recruit_troops_btn, rest_btn.get_index())
@@ -224,6 +231,133 @@ func _ready() -> void:
 	if age0 == 0:
 		_show_childhood_fast_forward()
 
+	# 订阅季节变化信号（P3-1 季节转场动画）
+	TimeManager.season_changed.connect(_on_season_changed)
+
+	# P1-6 首次进入新手引导（叙事口吻，纯 UI 层）
+	_start_tutorial()
+
+# ============================================================
+# P1-6 新手引导（首次进入 3 步，纯 UI 层）
+# ============================================================
+var _tutorial_step: int = 0
+var _tutorial_done: bool = false
+var _tutorial_highlight: Tween = null
+
+func _start_tutorial() -> void:
+	if _tutorial_done or GameState.tutorial_done:
+		return
+	_tutorial_step = 1
+	_show_tutorial_step()
+
+func _show_tutorial_step() -> void:
+	_clear_tutorial_highlight()
+	var target: Control = null
+	var tip: String = ""
+	match _tutorial_step:
+		1:
+			target = $TopBar
+			tip = "这是你的家族纪年栏——年份、朝代、季节都在这里流转。"
+		2:
+			target = advance_btn
+			tip = "春去秋来，点击「推进」度过一季，人生由此展开。"
+		3:
+			target = _category_btns.get("career") as Control
+			tip = "打开「仕途」，选择「履职」赚取俸禄，方能安身立命。"
+	if target == null:
+		_tutorial_done = true
+		GameState.tutorial_done = true
+		return
+	var popup := _make_popup("TutorialTip", 230, 140)
+	var vbox := _popup_vbox(popup)
+	_add_popup_title(vbox, "📖 入门指引 %d/3" % _tutorial_step)
+	var info := Label.new()
+	info.text = tip
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(info)
+	var next := Button.new()
+	next.text = "明白了"
+	next.custom_minimum_size = Vector2(0, 34)
+	next.pressed.connect(func():
+		popup.queue_free()
+		_clear_tutorial_highlight()
+		_tutorial_step += 1
+		if _tutorial_step <= 3:
+			_show_tutorial_step()
+		else:
+			_tutorial_done = true
+			GameState.tutorial_done = true
+	)
+	vbox.add_child(next)
+	add_child(popup)
+	# 目标控件高亮闪烁
+	_tutorial_highlight = create_tween().set_loops()
+	_tutorial_highlight.tween_property(target, "modulate", Color(1.4, 1.4, 1.0), 0.5)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_tutorial_highlight.tween_property(target, "modulate", Color.WHITE, 0.5)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _clear_tutorial_highlight() -> void:
+	if _tutorial_highlight != null:
+		_tutorial_highlight.kill()
+		_tutorial_highlight = null
+	for c in [$TopBar, advance_btn]:
+		c.modulate = Color.WHITE
+	if _category_btns.has("career"):
+		_category_btns.career.modulate = Color.WHITE
+
+# ============================================================
+# P3 动画：季节转场 / 立绘呼吸 / 死亡转场
+# ============================================================
+const SEASON_TINTS := {
+	TimeManager.Season.SPRING: Color(0.55, 1.0, 0.55, 0.12),
+	TimeManager.Season.SUMMER: Color(1.0, 0.9, 0.55, 0.10),
+	TimeManager.Season.AUTUMN: Color(1.0, 0.72, 0.35, 0.14),
+	TimeManager.Season.WINTER: Color(0.65, 0.8, 1.0, 0.16),
+}
+
+var _portrait_idle: Tween = null
+
+func _on_season_changed(_old: int, new_season: int, _year: int) -> void:
+	_play_season_transition(new_season)
+
+func _play_season_transition(new_season: int) -> void:
+	# 季节色调滤镜淡入淡出（复用 TWEEN_SEASON 常量，零新资源）
+	var tint: Color = SEASON_TINTS.get(new_season, Color.TRANSPARENT)
+	var overlay := ColorRect.new()
+	overlay.color = Color(tint.r, tint.g, tint.b, 0.0)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var tw := create_tween()
+	tw.tween_property(overlay, "color:a", tint.a, 0.25)
+	tw.tween_property(overlay, "color:a", 0.0, VisualConfig.TWEEN_SEASON)
+	tw.tween_callback(overlay.queue_free)
+
+func _start_portrait_idle() -> void:
+	# 立绘待机"呼吸"：用 scale+modulate 而非 position（VBox 布局会顶回 position tween）
+	if _char_portrait == null or _portrait_idle != null:
+		return
+	_char_portrait.pivot_offset = _char_portrait.size * 0.5
+	_char_portrait.pivot_offset = Vector2(90, 120)
+	_portrait_idle = create_tween().set_loops()
+	_portrait_idle.tween_property(_char_portrait, "scale", Vector2(1.015, 1.015), 1.6)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_portrait_idle.tween_property(_char_portrait, "scale", Vector2.ONE, 1.6)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _play_death_transition(then: Callable) -> void:
+	# 死亡戏剧化转场：深红→全黑（复用 TWEEN_DEATH 常量）
+	var veil := ColorRect.new()
+	veil.color = Color(0.10, 0.0, 0.0, 0.0)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(veil)
+	var tw := create_tween()
+	tw.tween_property(veil, "color:a", 1.0, VisualConfig.TWEEN_DEATH)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.tween_callback(then)
+
 # ============================================================
 # 工具
 # ============================================================
@@ -235,6 +369,41 @@ func _can_act(id: String) -> bool:
 
 func _mark_acted(id: String) -> void:
 	_cooldowns[id] = _season_key()
+
+# ============================================================
+# 快捷键：空格=推进，1=履职，2=修习（P1-4）
+# 用 _input 在 GUI 消费前拦截；输入框聚焦或弹窗开启时不响应
+# ============================================================
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	# 输入框聚焦时按键用于输入，不触发快捷键
+	if get_viewport().gui_get_focus_owner() is LineEdit:
+		return
+	# 有弹窗/事件对话框开启时不响应（避免在对白中误推进）
+	if _has_modal_open():
+		return
+	match event.keycode:
+		KEY_SPACE:
+			_on_advance_time()
+			get_viewport().set_input_as_handled()
+		KEY_1:
+			_work_quick()
+			get_viewport().set_input_as_handled()
+		KEY_2:
+			_study_quick()
+			get_viewport().set_input_as_handled()
+
+func _has_modal_open() -> bool:
+	# 检测是否有关键弹窗（CanvasLayer 弹层）或事件对话框开启
+	if _category_popup != null and is_instance_valid(_category_popup):
+		return true
+	for child in get_children():
+		if child is CanvasLayer:
+			return true
+		if child.name == "EventDialog" or child is Control and child.get_script() != null and str(child.get_script()).contains("event_dialog"):
+			return true
+	return false
 
 # ============================================================
 # 按钮分类系统 — 将14个按钮归类为5个入口
@@ -250,6 +419,7 @@ var _category_btns: Dictionary = {}
 var _troops_label: Label = null
 var _recruit_troops_btn: Button = null
 var _category_popup: CanvasLayer = null
+var _daily_btn: Button = null   # 一键日常按钮
 
 # ============================================================
 # 可折叠侧边栏 — ScrollContainer + 折叠头部
@@ -389,6 +559,9 @@ func _setup_category_buttons() -> void:
 		if is_instance_valid(old_btn):
 			old_btn.queue_free()
 	_category_btns.clear()
+	if _daily_btn and is_instance_valid(_daily_btn):
+		_daily_btn.queue_free()
+		_daily_btn = null
 
 	# 隐藏独立按钮（保留推进/自动/休憩/菜单）
 	var hide_list := [work_btn, study_btn, social_btn, marry_btn,
@@ -405,6 +578,24 @@ func _setup_category_buttons() -> void:
 	]
 
 	var insert_pos := auto_btn.get_index() + 1
+
+	# ── 一键日常按钮（放在分类按钮最前）──
+	_daily_btn = Button.new()
+	_daily_btn.name = "DailyRoutineBtn"
+	_daily_btn.text = "⚡ 一键日常"
+	_daily_btn.custom_minimum_size = Vector2(90, 32)
+	_daily_btn.tooltip_text = "一键完成本季可做的履职/修习/交游/祭祀/田猎等日常"
+	VisualConfig.style_button(_daily_btn, 13)
+	var dl_styles := VisualConfig.make_button_stylebox()
+	_daily_btn.add_theme_stylebox_override("normal", dl_styles["normal"])
+	_daily_btn.add_theme_stylebox_override("hover", dl_styles["hover"])
+	_daily_btn.add_theme_stylebox_override("pressed", dl_styles["pressed"])
+	_daily_btn.pressed.connect(_run_daily_routine)
+	_bind_feedback(_daily_btn)
+	bb.add_child(_daily_btn)
+	bb.move_child(_daily_btn, insert_pos)
+	insert_pos += 1
+
 	for cat in categories:
 		var btn := Button.new()
 		btn.name = "CatBtn_" + cat.id
@@ -420,6 +611,112 @@ func _setup_category_buttons() -> void:
 		bb.move_child(btn, insert_pos)
 		_category_btns[cat.id] = btn
 		insert_pos += 1
+
+
+# ============================================================
+# 按钮反馈 & 一键日常
+# ============================================================
+func _flash_btn(btn: Button) -> void:
+	"""按钮按下反馈——轻微缩放 + 金色高亮"""
+	if not is_instance_valid(btn):
+		return
+	btn.pivot_offset = btn.size / 2.0
+	btn.scale = Vector2(0.94, 0.94)
+	btn.modulate = Color(1.4, 1.35, 1.2, 1.0)
+	var tween := create_tween()
+	tween.tween_property(btn, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(btn, "modulate", Color.WHITE, 0.2)
+
+
+func _bind_feedback(btn: Button) -> void:
+	"""为持久按钮绑定按下/hover 反馈（U-3：轻量缩放动效）"""
+	if not is_instance_valid(btn):
+		return
+	if btn.has_meta("fb_bound"):
+		return
+	btn.set_meta("fb_bound", true)
+	btn.button_down.connect(_flash_btn.bind(btn))
+	btn.pivot_offset = btn.size * 0.5
+	btn.mouse_entered.connect(func(): _pulse_btn(btn, 1.03, VisualConfig.TWEEN_HOVER))
+	btn.mouse_exited.connect(func(): _pulse_btn(btn, 1.0, VisualConfig.TWEEN_HOVER))
+	btn.button_down.connect(func(): _pulse_btn(btn, 0.96, VisualConfig.TWEEN_PRESS))
+	btn.button_up.connect(func(): _pulse_btn(btn, 1.0, VisualConfig.TWEEN_PRESS))
+
+func _pulse_btn(btn: Button, target: float, dur: float) -> void:
+	if not is_instance_valid(btn):
+		return
+	btn.pivot_offset = btn.size * 0.5
+	var tw := btn.create_tween()
+	tw.tween_property(btn, "scale", Vector2(target, target), dur)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _run_daily_routine() -> void:
+	"""一键日常——自动完成本季可做的全部日常操作"""
+	if _category_popup:
+		_category_popup.queue_free()
+		_category_popup = null
+	if advance_btn.disabled or has_node("ChildhoodSkip") or has_node("ComingOfAge"):
+		_add_log("当前有重要抉择待定，暂不可一键日常。")
+		return
+	var char = GameState.current_character
+	if char.is_empty() or not char.get("is_alive", true):
+		_add_log("当前无法进行日常操作。")
+		return
+	var age = CharacterManager.get_character_age(char)
+	var done: Array[String] = []
+	# 1. 履职（正常模式）
+	if _can_act("work") and age >= 16 and not char.get("profession", "").is_empty():
+		_on_work_execute("normal", null)
+		done.append("履职")
+	# 2. 修习（自学 + 首个未满技能）
+	if _can_act("study") and age >= 6:
+		var skill_to_study := ""
+		var char_skills: Array = char.get("skills", [])
+		for skill_full in CharacterManager.SKILLS:
+			var lvl = 0
+			for s in char_skills:
+				if s.begins_with(skill_full + ":"):
+					lvl = int(s.split(":")[1])
+			if lvl < 5:
+				skill_to_study = skill_full
+				break
+		if not skill_to_study.is_empty():
+			_study_bonus = 0  # 自学模式
+			_on_skill_selected(skill_to_study, null)
+			done.append("修习")
+	# 3. 交游（同僚，稳妥）
+	if _can_act("socialize") and age >= 16:
+		_on_socialize_execute("colleague", null)
+		done.append("交游")
+	# 4. 祭祀（心祭，免费）
+	if _can_act("ritual") and age >= 16:
+		_on_ritual_execute(0, "simple", null)
+		done.append("祭祀")
+	# 5. 田猎
+	if _can_act("hunt") and age >= 16:
+		_on_hunt()
+		done.append("田猎")
+	# 6. 教子（首个在世子女 · 书数）
+	var children = CharacterManager.get_character_children(char)
+	var teach_idx := -1
+	for i in range(children.size()):
+		if children[i].get("is_alive", true):
+			teach_idx = i
+			break
+	if _can_act("teach") and teach_idx >= 0:
+		_on_teach_subject(teach_idx, "书数", null)
+		done.append("教子")
+	# 7. 休憩（健康偏低时）
+	var health = char.get("derived", {}).get("health", 100)
+	if _can_act("rest") and health < 70:
+		_on_rest()
+		done.append("休憩")
+	if done.is_empty():
+		_add_log("⚡ 一键日常——本季可做的日常皆已做完。")
+	else:
+		_add_log("⚡ 一键日常完成：%s。" % "、".join(done))
+	_refresh_display()
 
 
 func _on_category_pressed(cat_id: String, actions: Array) -> void:
@@ -455,16 +752,16 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 	for action in actions:
 		var action_btn: Button = null
 		match action:
-			"work": action_btn = _make_action_btn("💼 履职", _on_work)
-			"study": action_btn = _make_action_btn("📚 修习", _on_study)
-			"social": action_btn = _make_action_btn("🨝 交游", _on_socialize)
-			"ask_parents": action_btn = _make_action_btn("💰 要钱", _on_ask_parents)
-			"marry": action_btn = _make_action_btn("💍 议亲", _on_marry)
-			"teach": action_btn = _make_action_btn("👨‍🏫 教子", _on_teach_child)
-			"ritual": action_btn = _make_action_btn("🏛 祭祀", _on_ritual)
-			"travel": action_btn = _make_action_btn("🗺 出行", _on_travel)
-			"hunt": action_btn = _make_action_btn("🏹 田猎", _on_hunt)
-			"market": action_btn = _make_action_btn("📦 市集", _on_market)
+			"work": action_btn = _make_action_btn("💼 履职", _on_work, "work")
+			"study": action_btn = _make_action_btn("📚 修习", _on_study, "study")
+			"social": action_btn = _make_action_btn("🨝 交游", _on_socialize, "social")
+			"ask_parents": action_btn = _make_action_btn("💰 要钱", _on_ask_parents, "ask_parents")
+			"marry": action_btn = _make_action_btn("💍 议亲", _on_marry, "marry")
+			"teach": action_btn = _make_action_btn("👨‍🏫 教子", _on_teach_child, "teach")
+			"ritual": action_btn = _make_action_btn("🏛 祭祀", _on_ritual, "ritual")
+			"travel": action_btn = _make_action_btn("🗺 出行", _on_travel, "travel")
+			"hunt": action_btn = _make_action_btn("🏹 田猎", _on_hunt, "hunt")
+			"market": action_btn = _make_action_btn("📦 市集", _on_market, "market")
 		if action_btn:
 			vbox.add_child(action_btn)
 
@@ -523,17 +820,20 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 				vbox.add_child(af_btn)
 	add_child(popup)
 
-func _make_action_btn(text: String, callback: Callable) -> Button:
-	"""创建分类弹窗中的操作按钮"""
+func _make_action_btn(text: String, callback: Callable, action_id: String = "") -> Button:
+	"""创建分类弹窗中的操作按钮；action_id 非空时按本季冷却置灰标记"""
 	var btn := Button.new()
 	btn.text = text
 	btn.custom_minimum_size = Vector2(160, 30)
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	VisualConfig.style_button(btn, 13)
-	var btn_styles := VisualConfig.make_button_stylebox()
+	var btn_styles := VisualConfig.get_button_stylebox()   # U-3 共享缓存
 	btn.add_theme_stylebox_override("normal", btn_styles["normal"])
 	btn.add_theme_stylebox_override("hover", btn_styles["hover"])
 	btn.add_theme_stylebox_override("pressed", btn_styles["pressed"])
+	if not action_id.is_empty() and not _can_act(action_id):
+		btn.disabled = true
+		btn.text += "  ✓本季已做"
 	btn.pressed.connect(func():
 		if _category_popup:
 			_category_popup.queue_free()
@@ -585,8 +885,39 @@ func _age_gate_buttons() -> void:
 		_category_btns.social.disabled = not is_adult
 
 
-func _add_log(text: String) -> void:
-	event_log.append_text("[%s  %d年] %s\n" % [TimeManager.get_season_name(), abs(GameState.current_year), text])
+const LOG_UI_MAX_LINES := 200        # UI 日志最多显示 200 行（环形缓冲，锁死内存）
+const LOG_FULL_MAX_LINES := 5000     # 完整史册硬上限（防存档无限膨胀）
+
+func _add_log(text: String, level: String = "") -> void:
+	# 日志分级：未显式指定时按内容自带表情符自动分级
+	if level.is_empty():
+		if text.begins_with("☠") or text.begins_with("⚰") or text.begins_with("💔") or text.begins_with("📉"):
+			level = "danger"
+		elif text.begins_with("⚠"):
+			level = "warn"
+		elif text.begins_with("🎊") or text.begins_with("👶") or text.begins_with("🎓") or text.begins_with("👑"):
+			level = "success"
+	var color: String = {
+		"info": "#d2c4a7",     # 沙土色 — 日常
+		"success": "#8fbc8f",  # 铜锈浅绿 — 成长
+		"warn": "#daa520",     # 鎏金 — 警告
+		"danger": "#c41e3a",   # 朱砂 — 危险/死亡
+	}.get(level, "#d2c4a7")
+	# 用全角括号作头部，避免裸 ASCII `[` 被 bbcode 解析器误吞
+	var line := "[color=%s]〔%s·%d年〕%s[/color]\n" % [
+		color, TimeManager.get_season_name(), abs(GameState.current_year), text
+	]
+	# 完整史册：存"实际 append 的最终字符串"，读档直接回填（与显示一致）
+	GameState.full_log.append(line)
+	if GameState.full_log.size() > LOG_FULL_MAX_LINES:
+		GameState.full_log = GameState.full_log.slice(-LOG_FULL_MAX_LINES)
+	# UI 环形缓冲：保留最近 200 行，删除最早段落（延迟一帧规避瞬时跳动）
+	event_log.append_text(line)
+	call_deferred("_trim_log")
+
+func _trim_log() -> void:
+	while event_log.get_paragraph_count() > LOG_UI_MAX_LINES:
+		event_log.remove_paragraph(0)
 
 func _on_ask_parents() -> void:
 	if not _can_act("ask_parents"):
@@ -656,6 +987,9 @@ func _refresh_display() -> void:
 		var portrait := VisualConfig.load_texture(VisualConfig.TEX_PORTRAIT_PLAYER)
 		if portrait:
 			_char_portrait.texture = portrait
+		# 立绘加载后启动待机"呼吸"微动作（P3-2）
+		if _char_portrait.texture != null:
+			_start_portrait_idle()
 
 	# 若无纹理则隐藏立绘区域，避免大段空白
 	if _char_portrait:
@@ -1279,31 +1613,35 @@ func _show_infidelity_popup(notices: Array) -> void:
 		info.text = "你发现%s%s与外人私通！\n此事若传开，家族声望将受重创。" % [label, person_name]
 		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vbox.add_child(info)
-		# 选项1: 休妻/逐妾
+		# 选项1: 休妻/逐妾（不可逆，先二次确认再执行）
 		var divorce_cost = 10
 		var btn1 := Button.new()
 		btn1.text = "❌ 休弃（%d石，声望-5）" % divorce_cost
 		btn1.custom_minimum_size = Vector2(0, 34)
 		btn1.pressed.connect(func():
 			popup.queue_free()
-			CharacterManager.modify_wealth(-divorce_cost)
-			CharacterManager.modify_reputation(GameState.current_character, -5)
-			if person_type == "wife":
-				GameState.current_character.relationships.spouse = {}
-			elif person_type == "tongfang":
-				var tfs = GameState.family_data.get("tongfangs", [])
-				tfs.erase(person)
-			elif person_type == "furen":
-				var frs = GameState.family_data.get("furens", [])
-				frs.erase(person)
-			elif person_type == "ying_qie":
-				var yqs = GameState.family_data.get("ying_qie", [])
-				yqs.erase(person)
-			else:
-				var concs = GameState.family_data.get("concubines", [])
-				concs.erase(person)
-			_add_log("❌ 你休弃了%s%s——虽保全颜面，但家门蒙羞。" % [label, person_name])
-			_refresh_display()
+			_confirm("❌ 休弃%s%s" % [label, person_name],
+				"此举不可挽回：%s将被逐出家门，\n家族声望 -5，花费 %d 石。\n你确定要这么做吗？" % [person_name, divorce_cost],
+				true, func():
+				CharacterManager.modify_wealth(-divorce_cost)
+				CharacterManager.modify_reputation(GameState.current_character, -5)
+				if person_type == "wife":
+					GameState.current_character.relationships.spouse = {}
+				elif person_type == "tongfang":
+					var tfs = GameState.family_data.get("tongfangs", [])
+					tfs.erase(person)
+				elif person_type == "furen":
+					var frs = GameState.family_data.get("furens", [])
+					frs.erase(person)
+				elif person_type == "ying_qie":
+					var yqs = GameState.family_data.get("ying_qie", [])
+					yqs.erase(person)
+				else:
+					var concs = GameState.family_data.get("concubines", [])
+					concs.erase(person)
+				_add_log("❌ 你休弃了%s%s——虽保全颜面，但家门蒙羞。" % [label, person_name])
+				_refresh_display()
+			)
 		)
 		vbox.add_child(btn1)
 		# 选项2: 原谅
@@ -1631,7 +1969,7 @@ func _on_advance_time() -> void:
 	if not GameState.family_data.has("_loyalty_initialized"):
 		GameState.family_data["_loyalty_initialized"] = true
 		var spouse = char.relationships.get("spouse", {})
-		if not spouse.is_empty() and not spouse.has("loyalty"):
+		if spouse and not spouse.is_empty() and not spouse.has("loyalty"):
 			spouse["loyalty"] = 70 + randi_range(0, 20)
 			spouse["last_affair_year"] = -9999
 			if not spouse.has("is_pregnant"):
@@ -1833,7 +2171,8 @@ func _on_advance_time() -> void:
 		if _auto_mode:
 			_on_toggle_auto()
 		_refresh_display()
-		_show_death_menu()
+		# P3-3 死亡戏剧化转场：深红渐黑后弹结算菜单
+		_play_death_transition(func(): _show_death_menu())
 		return
 
 	# 事件
@@ -1883,7 +2222,8 @@ func _show_work_options(prof: String) -> void:
 	add_child(popup)
 
 func _on_work_execute(mode: String, popup: CanvasLayer) -> void:
-	popup.queue_free()
+	if popup: popup.queue_free()
+	_last_work_mode = mode   # 记忆本次强度，供一键复用
 	var char = GameState.current_character
 	var prof = char.get("profession", "小吏")
 	var attr_key = CharacterManager.get_profession_work_attr(prof)
@@ -1903,27 +2243,36 @@ func _on_work_execute(mode: String, popup: CanvasLayer) -> void:
 	var result = DiceSystem.roll_dice("2d6", bonus, 0)
 	match result.tier:
 		0:
-			CharacterManager.modify_wealth(int(base_income * 2 * income_mod))
+			var income0 := int(base_income * 2 * income_mod)
+			CharacterManager.modify_wealth(income0)
 			CharacterManager.modify_reputation(char, 5)
 			_add_log("履职（%s·%s）——大成功！收入大幅提升。" % [prof, mode_name])
+			_float_text(wealth_label, "+%d石" % income0, VisualConfig.GOLD)   # P1-2 Toast
 			var cb = CharacterManager.get_profession_critical_bonus(prof)
 			if not cb.is_empty():
 				var sp = cb.trim_prefix("skill_").split(":")
 				if sp.size() == 2:
 					CharacterManager.add_skill(char, sp[0], int(sp[1]))
 		1:
-			CharacterManager.modify_wealth(int(base_income * income_mod))
+			var income1 := int(base_income * income_mod)
+			CharacterManager.modify_wealth(income1)
 			CharacterManager.modify_reputation(char, 2)
 			_add_log("履职（%s·%s）——%s，获得收入。" % [prof, mode_name, result.tier_name])
+			_float_text(wealth_label, "+%d石" % income1, VisualConfig.GOLD)   # P1-2 Toast
 		2:
-			CharacterManager.modify_wealth(int(base_income * income_mod / 2))
+			var income2 := int(base_income * income_mod / 2)
+			CharacterManager.modify_wealth(income2)
 			_add_log("履职（%s·%s）——%s，收入微薄。" % [prof, mode_name, result.tier_name])
+			_float_text(wealth_label, "+%d石" % income2, VisualConfig.GOLD)   # P1-2 Toast
 		3:
 			CharacterManager.modify_reputation(char, -2)
 			_add_log("履职（%s·%s）——失败，工作出了差错。" % [prof, mode_name])
 	if health_delta != 0:
 		CharacterManager.modify_health(char, health_delta)
 		_add_log("（%s：健康 %+d）" % [mode_name, health_delta])
+		# P1-2 Toast：健康损耗用朱砂，回复用玉绿
+		_float_text(health_bar, "健康 %+d" % health_delta,
+			VisualConfig.VERMILLION if health_delta < 0 else VisualConfig.JADE)
 	_mark_acted("work")
 	_refresh_display()
 
@@ -1965,6 +2314,7 @@ var _debt_seasons: int = 0
 
 func _on_study_mode_chosen(mode: String, popup: CanvasLayer) -> void:
 	popup.queue_free()
+	_last_study_mode = mode   # 记忆本次修习方式，供一键复用
 	if mode == "master":
 		if GameState.family_data.wealth < 20:
 			_add_log("拜师需要20石，你财力不足，改为自学。")
@@ -1999,7 +2349,8 @@ func _show_skill_picker() -> void:
 	add_child(popup)
 
 func _on_skill_selected(skill_name: String, popup: CanvasLayer) -> void:
-	popup.queue_free()
+	if popup: popup.queue_free()
+	_last_study_skill = skill_name   # 记忆本次技能，供一键复用
 	var char = GameState.current_character
 	var attr_val = char.attributes.get("int", 10)
 	var bonus = DiceSystem.attr_to_bonus(attr_val) + _study_bonus
@@ -2033,6 +2384,77 @@ func _on_skill_selected(skill_name: String, popup: CanvasLayer) -> void:
 	_refresh_display()
 
 # ============================================================
+# 3.5 一键履职/修习（P1-7 记忆上次强度）
+# ============================================================
+func _work_quick() -> void:
+	if not _can_act("work"):
+		_add_log("本季已履行过职务，下季再来吧。")
+		return
+	var char = GameState.current_character
+	var prof = char.get("profession", "")
+	if prof.is_empty():
+		_add_log("你还没有职业，无法履职。")
+		return
+	if _last_work_mode.is_empty():
+		_show_work_options(prof)      # 首次仍弹窗选择强度
+	else:
+		_on_work_execute(_last_work_mode, null)   # 之后一键复用上次强度
+
+func _study_quick() -> void:
+	if not _can_act("study"):
+		_add_log("本季已修习过，下季再来吧。")
+		return
+	var char = GameState.current_character
+	if CharacterManager.get_character_age(char) < 6:
+		_add_log("你还太小，尚不能修习学问。待到6岁再来吧。")
+		return
+	if _last_study_mode.is_empty() or _last_study_skill.is_empty():
+		_show_study_options()         # 首次仍弹窗选择方式+技能
+	else:
+		_apply_study_once(_last_study_mode, _last_study_skill)
+
+func _apply_study_once(mode: String, skill_name: String) -> void:
+	# 快速修习：直接按记忆的方式+技能执行（复用 _on_study_mode_chosen + _on_skill_selected 的结算逻辑）
+	if mode == "master":
+		if GameState.family_data.wealth < 20:
+			_add_log("拜师需要20石，你财力不足，改为自学。")
+			_study_bonus = 0
+		else:
+			CharacterManager.modify_wealth(-20)
+			_study_bonus = 1
+			_add_log("花费20石拜师求学。")
+	else:
+		_study_bonus = 0
+	# 复用技能结算逻辑（与原 _on_skill_selected 一致）
+	var c = GameState.current_character
+	var attr_val = c.attributes.get("int", 10)
+	var bonus = DiceSystem.attr_to_bonus(attr_val) + _study_bonus
+	var result = DiceSystem.roll_dice("2d6", bonus, 0)
+	var effects: Array = []
+	match result.tier:
+		0:
+			var r0 = CharacterManager.study_skill(c, skill_name, 2 + _study_bonus)
+			effects.append({"type": "skill", "name": skill_name, "value": 2 + _study_bonus})
+			_add_log("修习%s——大成功！%s" % [skill_name, r0.message])
+		1:
+			var r1 = CharacterManager.study_skill(c, skill_name, 1 + _study_bonus)
+			effects.append({"type": "skill", "name": skill_name, "value": 1 + _study_bonus})
+			_add_log("修习%s——成功。%s" % [skill_name, r1.message])
+		2:
+			_add_log("修习%s——收效甚微，未能提升。" % skill_name)
+		3:
+			_add_log("修习%s——心不在焉，毫无收获。" % skill_name)
+	var attr_key: String = CharacterManager.SKILL_TO_ATTR.get(skill_name, "")
+	if not attr_key.is_empty() and effects.size() > 0:
+		var attr_delta: int = effects.back().get("value", 1)
+		CharacterManager.modify_attribute(c, attr_key, attr_delta)
+		var attr_display := CharacterManager.get_attr_display(attr_key)
+		_add_log("修习%s——%s +%d" % [skill_name, attr_display, attr_delta])
+	_mark_acted("study")
+	_study_bonus = 0
+	_refresh_display()
+
+# ============================================================
 # 4. 交游
 # ============================================================
 func _on_socialize() -> void:
@@ -2060,7 +2482,7 @@ func _show_socialize_options() -> void:
 	add_child(popup)
 
 func _on_socialize_execute(mode: String, popup: CanvasLayer) -> void:
-	popup.queue_free()
+	if popup: popup.queue_free()
 	var char = GameState.current_character
 	var loc = GameState.current_location
 	var attr_val = char.attributes.get("cha", 10)
@@ -2673,7 +3095,7 @@ func _show_ritual_options() -> void:
 	add_child(popup)
 
 func _on_ritual_execute(cost: int, mode: String, popup: CanvasLayer) -> void:
-	popup.queue_free()
+	if popup: popup.queue_free()
 	if cost > 0:
 		CharacterManager.modify_wealth(-cost)
 	var char = GameState.current_character
@@ -2956,7 +3378,7 @@ func _show_teach_picker(children: Array) -> void:
 	add_child(popup)
 
 func _on_teach_subject(child_index: int, subject: String, popup: CanvasLayer) -> void:
-	popup.queue_free()
+	if popup: popup.queue_free()
 	var char = GameState.current_character
 	var result = CharacterManager.educate_child(char, child_index, subject)
 	_mark_acted("teach")
@@ -3120,11 +3542,19 @@ func _do_save_game() -> void:
 
 func _do_load_game() -> void:
 	var msg = GameState.load_game()
+	# 读档后从完整史册重建屏幕日志（否则屏幕只剩"读档成功"一行，与史册分叉）
+	_restore_log()
 	_add_log(msg)
 	_refresh_display()
 	# 重新初始化界面
 	_main_char_milestones.clear()
 	_debt_seasons = 0
+
+func _restore_log() -> void:
+	event_log.clear()
+	for line in GameState.full_log:
+		event_log.append_text(line)
+	_trim_log()
 func _show_character_sheet() -> void:
 	var char = GameState.current_character
 	if char.is_empty(): return
@@ -3716,11 +4146,23 @@ func _make_popup(name: String, half_w: int, half_h: int) -> CanvasLayer:
 	var popup = CanvasLayer.new(); popup.name = name
 	var bg = ColorRect.new(); bg.color = Color(0, 0, 0, 0.7)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP   # 拦截弹窗外的穿透点击，防误触
 	popup.add_child(bg)
 	var panel = Panel.new(); panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left = -half_w; panel.offset_top = -half_h
 	panel.offset_right = half_w; panel.offset_bottom = half_h
 	popup.add_child(panel)
+	# 竹简展开入场：以面板中心为轴缩放 + 渐入（复用 TWEEN_POPUP_IN 常量）
+	panel.pivot_offset = Vector2(half_w, half_h)
+	panel.scale = Vector2(0.94, 0.94)
+	panel.modulate.a = 0.0
+	popup.ready.connect(func():
+		var tw := popup.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "scale", Vector2.ONE, VisualConfig.TWEEN_POPUP_IN)\
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "modulate:a", 1.0, VisualConfig.TWEEN_POPUP_IN)
+	)
 	return popup
 
 func _popup_vbox(popup: CanvasLayer) -> VBoxContainer:
@@ -3731,6 +4173,57 @@ func _popup_vbox(popup: CanvasLayer) -> VBoxContainer:
 	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 	return vbox
+
+func _confirm(title: String, body: String, danger: bool, on_yes: Callable) -> void:
+	"""通用二次确认弹层：高风险操作先确认再执行，避免误触不可逆"""
+	var popup := _make_popup("Confirm", 210, 200)
+	var vbox := _popup_vbox(popup)
+	_add_popup_title(vbox, title)
+	var info := Label.new()
+	info.text = body
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(info)
+	var yes := Button.new()
+	yes.text = "确定"
+	yes.custom_minimum_size = Vector2(0, 36)
+	yes.pressed.connect(func():
+		popup.queue_free()
+		on_yes.call()
+	)
+	var yes_styles := VisualConfig.make_button_stylebox()
+	if danger:
+		yes_styles["normal"] = yes_styles["normal"]  # 危险语义用朱砂强调文字
+		yes.add_theme_color_override("font_color", VisualConfig.VERMILLION)
+	yes.add_theme_stylebox_override("normal", yes_styles["normal"])
+	yes.add_theme_stylebox_override("hover", yes_styles["hover"])
+	yes.add_theme_stylebox_override("pressed", yes_styles["pressed"])
+	vbox.add_child(yes)
+	var no := Button.new()
+	no.text = "再想想"
+	no.custom_minimum_size = Vector2(0, 30)
+	no.pressed.connect(popup.queue_free)
+	vbox.add_child(no)
+	add_child(popup)
+
+# ============================================================
+# P1-2 浮动数值提示（Toast）：来源控件旁上浮渐隐
+# 金色=财富、朱砂=健康损耗、玉绿=成长
+# ============================================================
+func _float_text(anchor: Control, text: String, color: Color) -> void:
+	if not is_instance_valid(anchor):
+		return
+	var toast_layer: CanvasLayer = null
+	for child in get_children():
+		if child is CanvasLayer and child.name == "ToastLayer":
+			toast_layer = child
+			break
+	if toast_layer == null:
+		toast_layer = CanvasLayer.new()
+		toast_layer.name = "ToastLayer"
+		add_child(toast_layer)
+	var toast := preload("res://scripts/ui/toast.gd").new()
+	toast_layer.add_child(toast)
+	toast.show_toast(anchor, text, color)
 
 # ============================================================
 # 家族互动系统

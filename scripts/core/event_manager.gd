@@ -13,8 +13,7 @@ signal event_resolved(event_id: String, result: Dictionary)
 # ============================================================
 var _event_pool: Array = []           # 当前可用的事件池
 var _current_event: Dictionary = {}   # 当前激活的事件
-var _random_event_queue: Array = []   # 随机事件队列
-var _event_cooldowns: Dictionary = {} # 事件冷却追踪
+var _event_cooldowns: Dictionary = {} # 事件冷却追踪（防重复触发由冷却+季节双重控制）
 
 # ============================================================
 # 事件加载
@@ -93,6 +92,7 @@ func check_and_trigger() -> Dictionary:
 
 	# 候选事件：冷却通过 + 前置条件 + 季节匹配，同时计算当季权重
 	var weighted_events: Array = []
+	var has_seasonal := false  # 本季是否存在季节专属候选
 	for event in _event_pool:
 		var event_id = event.get("id", "")
 		var last_triggered = _event_cooldowns.get(event_id, -999)
@@ -106,12 +106,20 @@ func check_and_trigger() -> Dictionary:
 		var is_seasonal: bool = seasons is Array and not seasons.is_empty()
 		if is_seasonal and not seasons.has(season_name):
 			continue
-		var weight = _event_weight(event, is_seasonal)
+		if is_seasonal:
+			has_seasonal = true
+		var weight = _event_weight(event, is_seasonal, season_name)
 		if weight > 0:
-			weighted_events.append({"event": event, "weight": weight})
+			weighted_events.append({"event": event, "weight": weight, "seasonal": is_seasonal})
 
 	if weighted_events.is_empty():
 		return {}
+
+	# 当季有季节专属事件时，压低通用事件权重，让"当季特色"更容易浮现
+	if has_seasonal:
+		for entry in weighted_events:
+			if not entry.get("seasonal", false):
+				entry["weight"] = float(entry["weight"]) * GENERIC_SEASON_SUPPRESS
 
 	# 加权随机选择（本地实现，正确读取 trigger_weight.base）
 	var selected = _weighted_pick(weighted_events)
@@ -140,18 +148,25 @@ func trigger_specific_event(event_id: String) -> Dictionary:
 # 季节限定事件在当季的权重加成倍数（事件可用 trigger_weight.season_boost 覆盖）
 const SEASON_BOOST_DEFAULT := 1.5
 
+# 当季存在季节专属事件时，通用（非季节）事件的权重压低系数，让季节特色更明显
+const GENERIC_SEASON_SUPPRESS := 0.6
+
 # 当前季节中文名（复用 TimeManager.get_season_name：春/夏/秋/冬）。
 # 事件 JSON 可声明 "seasons": ["春","秋"] 限定只在对应季节出现；
 # 不声明 seasons 的事件四季通用（向后兼容）。
 func _season_name() -> String:
-	return TimeManager.get_season_name()
+	if TimeManager and TimeManager.has_method("get_season_name"):
+		return TimeManager.get_season_name()
+	return "春"  # 兜底：TimeManager 缺失时按春季处理
 
 # 计算事件当季权重：基础权重 trigger_weight.base（缺省 1.0），
-# 季节限定事件再乘 season_boost，使当季专属事件更易触发。
-func _event_weight(event: Dictionary, is_seasonal: bool) -> float:
-	var weight = float(event.get("trigger_weight", {}).get("base", 1.0))
+# 季节限定事件再乘加成：优先取 trigger_weight.当季名键（如 "春": 2.0），
+# 其次 trigger_weight.season_boost，最后回落 SEASON_BOOST_DEFAULT。
+func _event_weight(event: Dictionary, is_seasonal: bool, season_name: String) -> float:
+	var tw: Dictionary = event.get("trigger_weight", {})
+	var weight = float(tw.get("base", 1.0))
 	if is_seasonal:
-		weight *= float(event.get("trigger_weight", {}).get("season_boost", SEASON_BOOST_DEFAULT))
+		weight *= float(tw.get(season_name, tw.get("season_boost", SEASON_BOOST_DEFAULT)))
 	return weight
 
 # 按权重随机抽取。本地实现原因：DiceSystem.weighted_random_select 用 item.get(weight_key)

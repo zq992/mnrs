@@ -49,6 +49,8 @@ var household_data: Dictionary = {
 # ============================================================
 var event_history: Array = []         # 已触发事件记录
 var completed_timeline_events: Array = []  # 已完成的时间线事件
+var full_log: Array = []              # 完整史册（UI 只显示最近200行，此处全量保存；上限见 LOG_FULL_MAX_LINES）
+var tutorial_done: bool = false       # 新手引导是否已完成（持久化，避免每局重复）
 
 # ============================================================
 # 地图状态
@@ -130,6 +132,8 @@ func save_game() -> String:
 		"completed_timeline_events": completed_timeline_events,
 		"current_location": current_location,
 		"explored_locations": explored_locations,
+		"full_log": full_log,
+		"tutorial_done": tutorial_done,
 	}
 	var json_str := JSON.stringify(save_data, "\t")
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -166,6 +170,8 @@ func load_game() -> String:
 	completed_timeline_events = save_data.get("completed_timeline_events", [])
 	current_location = save_data.get("current_location", "镐京")
 	explored_locations = save_data.get("explored_locations", ["镐京"])
+	full_log = save_data.get("full_log", [])
+	tutorial_done = save_data.get("tutorial_done", false)
 	return "读档成功——回到公元前%d年，%s。" % [abs(current_year), current_location]
 
 func has_save() -> bool:
