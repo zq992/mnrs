@@ -792,9 +792,9 @@ func _on_category_pressed(cat_id: String, actions: Array) -> void:
 		elif sl >= 4 and CharacterManager.can_promote(char_for_cat) and sl < 6:
 			var pp_btn := _make_action_btn("📈 请迁（势力已足）", _on_power_promote)
 			vbox.add_child(pp_btn)
-		# 上朝按钮（士及以上，每季一次）
+		# 朝觐按钮（士及以上，每季一次）
 		if char_for_cat.social_level >= 3 and not _attended_court_this_season:
-			var court_btn := _make_action_btn("🏛 上朝", _on_attend_court)
+			var court_btn := _make_action_btn("🏛 朝觐周王", _on_attend_court)
 			vbox.add_child(court_btn)
 		if char_for_cat.reputation >= 90 and char_for_cat.social_level >= 3 and char_for_cat.social_level < 6 and not _met_king_this_season:
 			var mk_btn := _make_action_btn("👑 觐见国君", _on_meet_king)
@@ -3888,7 +3888,7 @@ func _on_reputation_promote() -> void:
 	_refresh_display()
 
 # ============================================================
-# 上朝
+# 朝觐周王
 # ============================================================
 func _on_attend_court() -> void:
 	var char = GameState.current_character
@@ -3899,7 +3899,7 @@ func _on_attend_court() -> void:
 	# 朝贡花费
 	var tribute = 5
 	if GameState.family_data.wealth < tribute:
-		_add_log("无力支付朝贡礼金（需%d石），无法上朝。" % tribute)
+		_add_log("无力备齐朝觐贡礼（需%d石），无法朝王。" % tribute)
 		return
 	CharacterManager.modify_wealth(-tribute)
 
@@ -3915,24 +3915,24 @@ func _on_attend_court() -> void:
 				var new_pos = positions[randi_range(0, positions.size() - 1)]
 				char["official_position"] = new_pos
 				CharacterManager.modify_reputation(char, 5)
-				_add_log("上朝大吉！被任命为" + new_pos + "——从此位列朝班。声望+5")
+				_add_log("朝觐大吉！受周王册命为" + new_pos + "——从此位列朝班。声望+5")
 			else:
 				var pos_idx = positions.find(current_pos)
 				if pos_idx > 0:
 					var higher = positions[pos_idx - 1]
 					char["official_position"] = higher
-					_add_log("上朝大吉！升迁为" + higher + "！声望+5")
+					_add_log("朝觐大吉！受王命擢升为" + higher + "！声望+5")
 				else:
-					_add_log("上朝奏对得体，天子嘉许。声望+5")
+					_add_log("朝觐应对得体，周王嘉许。声望+5")
 				CharacterManager.modify_reputation(char, 5)
 		1:  # 成功
 			CharacterManager.modify_reputation(char, 2)
-			_add_log("上朝议事——与众大夫共商国是，声望+2。")
+			_add_log("朝觐议事——与诸卿大夫共商国是，声望+2。")
 		2:  # 平平
-			_add_log("上朝——朝中无事，站了一天。")
+			_add_log("朝觐——朝中无事，肃立终日。")
 		3:  # 失败
 			CharacterManager.modify_reputation(char, -3)
-			_add_log("上朝失仪——被御史弹劾，声望-3。")
+			_add_log("朝觐失仪——被太史斥责，声望-3。")
 	_refresh_display()
 
 func _on_meet_king() -> void:
