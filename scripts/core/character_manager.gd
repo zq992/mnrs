@@ -883,35 +883,35 @@ func _consorts_table(character: Dictionary) -> Array:
 		"kind_household": "嫡",
 		"notice": "👶 喜得{kind}——{surname}{name}！",
 		"household": "正妻诞下{household_kind}{name}",
-		"base": 0.8, "default_loyalty": 80, "low_inc": 3.0, "mid_inc": 1.5, "cha_inc": 2.0, "penalty": 20,
+		"base": 0.8, "default_loyalty": 80, "low_inc": 3.0, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 20,
 	})
 	rows.append({
 		"type": "concubine", "list": GameState.family_data.get("concubines", []),
 		"kind_household": "",
 		"notice": "👶 妾室{mom}喜得{kind}——{surname}{name}（庶出）！",
 		"household": "妾室{mom}诞下庶出子女",
-		"base": 1.5, "default_loyalty": 60, "low_inc": 3.0, "mid_inc": 1.5, "cha_inc": 2.0, "penalty": 20,
+		"base": 1.5, "default_loyalty": 60, "low_inc": 3.0, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 20,
 	})
 	rows.append({
 		"type": "tongfang", "list": GameState.family_data.get("tongfangs", []),
 		"kind_household": "",
 		"notice": "👶 通房丫头{mom}喜得{kind}——{surname}{name}（婢生）！",
 		"household": "通房{mom}诞下婢生子",
-		"base": 2.0, "default_loyalty": 50, "low_inc": 4.0, "mid_inc": 2.0, "cha_inc": 2.5, "penalty": 15,
+		"base": 2.0, "default_loyalty": 50, "low_inc": 4.0, "mid_inc": 3.5, "cha_inc": 2.5, "penalty": 15,
 	})
 	rows.append({
 		"type": "furen", "list": GameState.family_data.get("furens", []),
 		"kind_household": "",
 		"notice": "👑 夫人{mom}喜得{kind}——{surname}{name}（贵子）！",
 		"household": "夫人{mom}诞下贵子",
-		"base": 0.5, "default_loyalty": 85, "low_inc": 2.0, "mid_inc": 1.0, "cha_inc": 1.5, "penalty": 15,
+		"base": 0.5, "default_loyalty": 85, "low_inc": 2.0, "mid_inc": 2.5, "cha_inc": 1.5, "penalty": 15,
 	})
 	rows.append({
 		"type": "ying_qie", "list": GameState.family_data.get("ying_qie", []),
 		"kind_household": "",
 		"notice": "🏰 媵妾{mom}喜得{kind}——{surname}{name}（媵出）！",
 		"household": "媵妾{mom}诞下媵出子女",
-		"base": 1.0, "default_loyalty": 70, "low_inc": 2.5, "mid_inc": 1.5, "cha_inc": 2.0, "penalty": 15,
+		"base": 1.0, "default_loyalty": 70, "low_inc": 2.5, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 15,
 	})
 	return rows
 

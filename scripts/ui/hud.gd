@@ -45,6 +45,7 @@ var _auto_mode: bool = false
 var _auto_timer: Timer = null
 
 var _cooldowns: Dictionary = {}
+var _intimate_this_season: Dictionary = {}   # 本季与哪些妻妾互动过（忠诚衰减豁免）
 var _last_work_mode: String = ""    # 记忆上次履职强度（一键复用）
 var _last_study_mode: String = ""   # 记忆上次修习方式（一键复用）
 var _last_study_skill: String = ""  # 记忆上次修习技能（一键复用）
@@ -369,6 +370,28 @@ func _can_act(id: String) -> bool:
 
 func _mark_acted(id: String) -> void:
 	_cooldowns[id] = _season_key()
+
+func _mark_intimate(mother_type: String, mother_index: int) -> void:
+	"""标记本季与某妻妾互动过（交谈/亲近/赏赐/求子）——忠诚衰减豁免"""
+	_intimate_this_season["%s_%d" % [mother_type, mother_index]] = true
+
+func _is_intimate(mother_type: String, mother_index: int) -> bool:
+	return _intimate_this_season.get("%s_%d" % [mother_type, mother_index], false)
+
+func _find_consort_index(mother_type: String, member_data: Dictionary) -> int:
+	"""按名字找妻妾在列表中的索引（wife 恒为 0）"""
+	if mother_type == "wife":
+		return 0
+	var arr: Array = []
+	match mother_type:
+		"concubine": arr = GameState.family_data.get("concubines", [])
+		"furen": arr = GameState.family_data.get("furens", [])
+		"ying_qie": arr = GameState.family_data.get("ying_qie", [])
+		"tongfang": arr = GameState.family_data.get("tongfangs", [])
+	for i in range(arr.size()):
+		if arr[i].name == member_data.name and arr[i].surname == member_data.surname:
+			return i
+	return -1
 
 func _run_family_act(id: String, log: String, cb: Callable) -> void:
 	"""统一家族动作执行器：入口查冷却，执行后打点"""
@@ -1060,7 +1083,7 @@ func _refresh_display() -> void:
 	reputation_bar.value = char.get("reputation", 0)
 	power_bar.value = derived.get("power", 0)
 	ambition_bar.value = derived.get("ambition", 0)
-	wealth_label.text = "财富：%d 石" % GameState.family_data.wealth
+	wealth_label.text = "财富：%d 石 | 情报：%d" % [GameState.family_data.wealth, GameState.family_data.get("intel", 0)]
 	# 家兵显示（多兵种）
 	if _troops_label:
 		var max_troops = char.get("max_troops", {})
@@ -1498,10 +1521,7 @@ func _check_debt_game_over() -> void:
 		_debt_seasons = 0
 
 func _on_start_affair() -> void:
-	"""玩家主动偷情——选择目标"""
-	if not _can_act("start_affair"):
-		_add_log("本季已有过风流之事，下季再来吧。")
-		return
+	"""玩家主动偷情——选择情人（固定列表，跨季保留）"""
 	var char = GameState.current_character
 	if not CharacterManager.is_married(char):
 		_add_log("你尚未娶妻——何来偷情之说？")
@@ -1532,36 +1552,163 @@ func _on_start_affair() -> void:
 	add_child(popup)
 
 func _generate_affair_candidates(char: Dictionary) -> Array:
-	"""生成3-5个可私会NPC候选"""
-	var candidates: Array = []
-	var pool_size = 3 + randi_range(0, 2)
-	var surnames = CharacterManager.EIGHT_SURNAMES.duplicate()
-	surnames.erase(char.get("surname", ""))
-	var male_names = ["虎", "龙", "昆", "昊", "晟", "青", "飞", "武"]
-	var female_names = ["姜", "妃", "妍", "韵", "紫", "娜", "淑", "婉", "薇", "萍"]
-	var npc_descs = ["邻家少妇", "采桑女", "贵族女子", "公卿家眷", "边邑戍卒之妻", "巫祝之女", "外乡旅人", "宫中侍女", "落魄士人"]
-	for _i in range(pool_size):
-		var s = surnames[randi_range(0, surnames.size() - 1)]
-		var names_pool = female_names if char.get("gender", "male") == "male" else male_names
-		var n = names_pool[randi_range(0, names_pool.size() - 1)]
-		var d = npc_descs[randi_range(0, npc_descs.size() - 1)]
-		candidates.append({"surname": s, "name": n, "desc": d})
-	return candidates
+	"""固定情人列表：无则生成 2-3 位初始情人（跨季保留），有则直接返回"""
+	if not GameState.family_data.has("lovers"):
+		GameState.family_data["lovers"] = []
+	var lovers: Array = GameState.family_data["lovers"]
+	if lovers.is_empty():
+		var pool_size = 2 + randi_range(0, 1)
+		var surnames = CharacterManager.EIGHT_SURNAMES.duplicate()
+		surnames.erase(char.get("surname", ""))
+		var male_names = ["虎", "龙", "昆", "昊", "晟", "青", "飞", "武"]
+		var female_names = ["姜", "妃", "妍", "韵", "紫", "娜", "淑", "婉", "薇", "萍"]
+		var npc_descs = ["邻家少妇", "采桑女", "贵族女子", "公卿家眷", "边邑戍卒之妻", "巫祝之女", "外乡旅人", "宫中侍女", "落魄士人"]
+		for _i in range(pool_size):
+			var s = surnames[randi_range(0, surnames.size() - 1)]
+			var names_pool = female_names if char.get("gender", "male") == "male" else male_names
+			var n = names_pool[randi_range(0, names_pool.size() - 1)]
+			var d = npc_descs[randi_range(0, npc_descs.size() - 1)]
+			lovers.append({"surname": s, "name": n, "desc": d, "intimacy": 0, "rumor": 0, "married": randi_range(0, 1) == 1})
+	return lovers.duplicate()
 
 func _on_affair_target_chosen(candidate: Dictionary, popup: CanvasLayer) -> void:
-	"""选择偷情对象后执行"""
+	"""选择情人对象 → 打开情人动作菜单"""
 	popup.queue_free()
 	var char = GameState.current_character
-	var target_married = randi_range(0, 1) == 1
-	var result = CharacterManager.player_affair(char, candidate.surname, "", candidate.name, target_married)
-	if result.get("incest_blocked", false):
-		_show_incest_blocked_popup(result)
+	var incest = CharacterManager.is_incestuous(char, {"surname": candidate.surname, "name": candidate.name})
+	if incest.get("is_incest", false):
+		_show_incest_blocked_popup(incest)
 		return
-	_add_log(result.get("message", ""))
-	if result.get("discovered", false):
-		_add_log("⚠ 聲望 %d" % result.get("penalty", 0))
-	_mark_acted("start_affair")
+	_show_lover_actions(candidate)
+
+func _show_lover_actions(lover: Dictionary) -> void:
+	"""情人动作菜单：私会/赠礼/温存（冷却按情人+动作区分）"""
+	var lovers: Array = GameState.family_data.get("lovers", [])
+	var li := -1
+	for i in range(lovers.size()):
+		if lovers[i].surname == lover.surname and lovers[i].name == lover.name:
+			li = i
+			break
+	if li < 0:
+		return
+	var popup := _make_popup("LoverActions", 240, 210)
+	var vbox := _popup_vbox(popup)
+	_add_popup_title(vbox, "🌙 %s姓·%s" % [lover.surname, lover.name])
+	var info := Label.new()
+	info.text = "%s · 亲密 %d · 风声 %d" % [lover.get("desc", ""), lover.get("intimacy", 0), lover.get("rumor", 0)]
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(info)
+	# 私会
+	var meet_btn := Button.new()
+	meet_btn.text = "🌿 私会（亲密+2 情报+1 风声+1）"
+	meet_btn.custom_minimum_size = Vector2(0, 30)
+	if not _can_act("lover_%d_meet" % li):
+		meet_btn.disabled = true
+		meet_btn.text += "  ✓本季已做"
+	meet_btn.pressed.connect(func(): _do_lover_act(li, "meet", popup))
+	vbox.add_child(meet_btn)
+	# 赠礼
+	var gift_btn := Button.new()
+	gift_btn.text = "🎁 赠礼（亲密+3 花10石 风声+1）"
+	gift_btn.custom_minimum_size = Vector2(0, 30)
+	if not _can_act("lover_%d_gift" % li):
+		gift_btn.disabled = true
+		gift_btn.text += "  ✓本季已做"
+	gift_btn.pressed.connect(func(): _do_lover_act(li, "gift", popup))
+	vbox.add_child(gift_btn)
+	# 温存
+	var warm_btn := Button.new()
+	warm_btn.text = "🔥 温存（亲密+3 情报+2 风声+1）"
+	warm_btn.custom_minimum_size = Vector2(0, 30)
+	if not _can_act("lover_%d_warm" % li):
+		warm_btn.disabled = true
+		warm_btn.text += "  ✓本季已做"
+	warm_btn.pressed.connect(func(): _do_lover_act(li, "warm", popup))
+	vbox.add_child(warm_btn)
+	var close_btn := Button.new()
+	close_btn.text = "离开"
+	close_btn.custom_minimum_size = Vector2(0, 30)
+	close_btn.pressed.connect(popup.queue_free)
+	vbox.add_child(close_btn)
+	add_child(popup)
+
+func _do_lover_act(lover_index: int, act: String, popup: CanvasLayer) -> void:
+	"""执行情人动作：亲密/风声/情报收益"""
+	popup.queue_free()
+	var cooldown_id := "lover_%d_%s" % [lover_index, act]
+	if not _can_act(cooldown_id):
+		_add_log("本季已做过此事，下季再来吧。")
+		return
+	var char = GameState.current_character
+	var lovers: Array = GameState.family_data.get("lovers", [])
+	if lover_index < 0 or lover_index >= lovers.size():
+		return
+	var lover: Dictionary = lovers[lover_index]
+	var intimacy_gain := 0
+	var intel_gain := 0
+	var cost := 0
+	var act_name := "私会"
+	var icon := "🌿"
+	match act:
+		"meet":
+			intimacy_gain = 2; intel_gain = 1; act_name = "私会"; icon = "🌿"
+		"gift":
+			cost = 10; intimacy_gain = 3; act_name = "赠礼"; icon = "🎁"
+			if GameState.family_data.get("wealth", 0) < cost:
+				_add_log("囊中羞涩——赠礼需 %d 石。" % cost)
+				return
+		"warm":
+			intimacy_gain = 3; intel_gain = 2; act_name = "温存"; icon = "🔥"
+		_:
+			return
+	lover["intimacy"] = lover.get("intimacy", 0) + intimacy_gain
+	lover["rumor"] = lover.get("rumor", 0) + 1
+	if cost > 0:
+		CharacterManager.modify_wealth(-cost)
+	if intel_gain > 0:
+		GameState.family_data["intel"] = GameState.family_data.get("intel", 0) + intel_gain
+	var extra := ""
+	if intel_gain > 0:
+		extra = "，情报+%d" % intel_gain
+	elif cost > 0:
+		extra = "，花 %d 石" % cost
+	_add_log("%s 与%s姓·%s%s——亲密+%d，风声+1%s。" % [icon, lover.surname, lover.name, act_name, intimacy_gain, extra])
+	# 高亲密情人为偷情带来真实收益（财富）
+	if lover["intimacy"] >= 10:
+		var grift = 3 + randi_range(0, 3)
+		CharacterManager.modify_wealth(grift)
+		_add_log("💰 %s姓·%s念及旧情，暗中接济你 %d 石。" % [lover.surname, lover.name, grift])
+	_mark_acted(cooldown_id)
 	_refresh_display()
+
+func _check_lover_exposure() -> void:
+	"""情人风声≥15 败露：丑闻+和睦降+报复/和离，败露后情缘断绝"""
+	var lovers: Array = GameState.family_data.get("lovers", [])
+	if lovers.is_empty():
+		return
+	var char = GameState.current_character
+	for li in range(lovers.size() - 1, -1, -1):
+		var lover: Dictionary = lovers[li]
+		if lover.get("rumor", 0) < 15:
+			continue
+		CharacterManager.modify_scandal_level(1)
+		GameState.household_data["harmony"] = max(0, GameState.household_data.get("harmony", 50) - 10)
+		GameState.family_data.get("infidelity_log", []).append({
+			"year": GameState.current_year,
+			"person": "%s姓·%s" % [lover.get("surname", ""), lover.get("name", "")],
+			"discovered": true, "penalty": -10, "action": "私情败露"
+		})
+		_add_log("💔 你与%s姓·%s的私情败露！家宅不宁——和睦-10，丑闻+1。" % [lover.get("surname", ""), lover.get("name", "")])
+		var r := randi_range(0, 99)
+		if r < 25 and CharacterManager.is_married(char):
+			CharacterManager.modify_health(char, -5)
+			_add_log("⚔ 情人之夫寻仇——你受了重伤，健康-5！")
+		elif r < 50 and CharacterManager.is_married(char):
+			var spouse = char.relationships.get("spouse", {})
+			spouse["loyalty"] = max(0, spouse.get("loyalty", 50) - 30)
+			_add_log("💢 正妻得知此事，心灰意冷——忠诚-30。")
+		lovers.remove_at(li)
+		_add_log("🌪 你与%s姓·%s情缘断绝。" % [lover.get("surname", ""), lover.get("name", "")])
 
 func _show_incest_blocked_popup(result: Dictionary) -> void:
 	"""乱伦阻止弹窗"""
@@ -2142,6 +2289,19 @@ func _on_advance_time() -> void:
 		if not brother_event.is_empty():
 			_show_brother_event_popup(brother_event)
 
+	# 妻妾忠诚自然衰减（每季1-2，地板20；本季互动过不衰减）
+	if _adv_age >= 16:
+		for decay_row in CharacterManager._consorts_table(char):
+			for di in range(decay_row.list.size()):
+				var dm = decay_row.list[di]
+				if dm.is_empty() or not dm.get("is_alive", true):
+					continue
+				if _is_intimate(decay_row.type, di):
+					continue
+				dm["loyalty"] = max(20, dm.get("loyalty", decay_row.default_loyalty) - randi_range(1, 2))
+	# 情人风声败露检查
+	_check_lover_exposure()
+
 	# 配偶/妾室忠诚度检测 —— 仅成年后检查
 	if _adv_age >= 16:
 		var infidelity_notices = CharacterManager.check_spouse_fidelity(char)
@@ -2205,6 +2365,7 @@ func _on_advance_time() -> void:
 
 	_met_king_this_season = false
 	_attended_court_this_season = false
+	_intimate_this_season = {}   # 新一季开始，清空亲密标记
 	_age_gate_buttons()
 	_refresh_display()
 
@@ -4639,6 +4800,11 @@ func _do_family_talk(relation_type: String, member_data: Dictionary) -> void:
 		if sib_idx >= 0:
 			var aff_gain = 1 + randi_range(0, 4)  # +1~5
 			CharacterManager.modify_sibling_affection(sib_idx, aff_gain)
+	# 与妻妾交谈记入本季亲密（忠诚衰减豁免）
+	if relation_type in ["spouse", "concubine", "furen", "ying_qie", "tongfang"]:
+		var c_idx := _find_consort_index(relation_type, member_data)
+		if c_idx >= 0:
+			_mark_intimate(relation_type, c_idx)
 	_mark_acted("talk_" + relation_type)
 
 
@@ -4751,6 +4917,7 @@ func _do_boost_spouse_loyalty(member_data: Dictionary, mother_type: String = "wi
 	if not _can_act(cooldown_id):
 		_add_log("本季已赏赐过这位妻妾，下季再来吧。")
 		return
+	_mark_intimate(mother_type, mother_index)   # 赏赐记入本季亲密
 	var result = CharacterManager.boost_spouse_loyalty(GameState.current_character, mother_type, mother_index)
 	if result.get("success", false):
 		_add_log("🎁 " + result.message)
@@ -4770,6 +4937,7 @@ func _do_try_for_baby(mother_type: String, index: int) -> void:
 	var roll_result: Dictionary = DiceSystem.roll_dice("2d6", bonus, 0)
 	var r: int = roll_result.final_value
 	var tier: int = roll_result.tier
+	_mark_intimate(mother_type, index)   # 本季已同房，忠诚衰减豁免
 	var m_name := CharacterManager._get_mother_name(mother_type, index)
 	match tier:
 		0:  # 大成功——必孕
@@ -4845,6 +5013,13 @@ func _do_family_bond(member_data: Dictionary, cooldown_id: String = "bond_spouse
 	else:
 		CharacterManager.modify_ambition(char, -1)
 		_add_log("❤️ 今日与%s有些疏远……" % name_str)
+	# 亲近记入本季亲密（忠诚衰减豁免）
+	var b_type := cooldown_id.trim_prefix("bond_")
+	if b_type == "spouse":
+		b_type = "wife"
+	var b_idx := _find_consort_index(b_type, member_data)
+	if b_idx >= 0:
+		_mark_intimate(b_type, b_idx)
 	GameState.current_character["_last_bond_season"] = 0
 	_mark_acted(cooldown_id)
 
