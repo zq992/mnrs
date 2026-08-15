@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://test_p52_same_room"]
+
+[ext_resource type="Script" path="res://tests/test_p52_same_room.gd" id="1"]
+
+[node name="TestP52SameRoom" type="Node"]
+script = ExtResource("1")
