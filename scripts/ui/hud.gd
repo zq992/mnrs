@@ -5010,10 +5010,21 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 			else:
 				actions.append({"text": "🏠 回家探望", "callback": func(): _do_family_visit(member_data), "cooldown": "visit_mother"})
 		"sibling":
+			var sib_idx: int = _find_sibling_index(member_data)
 			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_sibling"})
-			actions.append({"text": "🎁 赠礼（5石）", "callback": func(): _on_gift_sibling(_find_sibling_index(member_data)), "cooldown": "gift_sibling_" + str(_find_sibling_index(member_data))})
+			actions.append({"text": "🎁 赠礼（5石）", "callback": func(): _on_gift_sibling(sib_idx), "cooldown": "gift_sibling_" + str(sib_idx)})
 			actions.append({"text": "🤝 结盟", "callback": func(): _do_family_ally(member_data), "cooldown": "ally_sibling"})
-			actions.append({"text": "💔 决裂", "callback": func(): _on_break_ally_sibling(_find_sibling_index(member_data)), "cooldown": "ally_sibling"})
+			actions.append({"text": "💔 决裂", "callback": func(): _on_break_ally_sibling(sib_idx), "cooldown": "ally_sibling"})
+			# 姐弟乱伦线——仅成年姐妹，禁忌入口（5.2/5.8）
+			if member_data.get("gender", "") == "female" and sib_idx >= 0:
+				var sib_age: int = GameState.current_year - member_data.get("birth_year", GameState.current_year)
+				var sibs_data: Array = GameState.family_data.get("siblings", [])
+				var sib_full = sibs_data[sib_idx]
+				if player_age >= 16 and sib_age >= 16 and not CharacterManager._sibling_is_married(sib_full) and not sib_full.get("is_pregnant", false):
+					actions.append({"text": "🌙 同房（禁忌）", "callback": func(): _do_try_incest_sister(member_data, sib_idx), "cooldown": "try_baby_sister_" + str(sib_idx), "self_gated": true})
+					if sib_full.get("incest_rumor", 0) > 0:
+						actions.append({"text": "🌫 掩人耳目（20石）", "callback": func(): _do_cover_incest_rumor(member_data, sib_idx), "cooldown": "cover_rumor_" + str(sib_idx), "self_gated": true})
+					actions.append({"text": "🏮 远嫁（绝后患）", "callback": func(): _do_marry_out_sister_incest(member_data, sib_idx), "cooldown": "marry_sister_" + str(sib_idx), "self_gated": true})
 		"spouse":
 			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_wife_0"})
 			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data, "wife", 0), "cooldown": "bond_wife_0"})
@@ -5306,6 +5317,45 @@ func _do_try_for_baby_concubine(member_data: Dictionary) -> void:
 		_add_log("找不到该妾室……")
 		return
 	_do_try_for_baby("concubine", cn_idx)
+
+func _do_try_incest_sister(member_data: Dictionary, sib_idx: int) -> void:
+	"""主动姐弟乱伦：CON 掷骰判定，成功走 handle_incest_pregnancy；每次独立风声判定（5.2/5.4）。"""
+	var cooldown_id := "try_baby_sister_%d" % sib_idx
+	if not _can_act(cooldown_id):
+		_add_log("本季已与这位姐妹亲近，下季再说吧。")
+		return
+	var siblings: Array = GameState.family_data.get("siblings", [])
+	if sib_idx < 0 or sib_idx >= siblings.size():
+		_add_log("找不到这位姐妹……")
+		return
+	var char = GameState.current_character
+	var sister = siblings[sib_idx]
+	var con: int = char.attributes.get("con", 10)
+	var bonus: int = DiceSystem.attr_to_bonus(con)
+	var roll_result: Dictionary = DiceSystem.roll_dice("2d6", bonus, 0)
+	var r: int = roll_result.final_value
+	sister["has_incest"] = true
+	_add_log("🌙 你与姐%s越礼而行——此乃宗族大忌，天地不容。（CON %d -> %d）" % [sister.get("name", ""), con, r])
+	var preg_result = CharacterManager.handle_incest_pregnancy(char, sib_idx)
+	if preg_result.get("pregnant", false):
+		_add_log("⚠ 姐%s怀上了你的骨肉——孽种若生，必遗臭万年！" % sister.get("name", ""))
+	# 风声判定——可能一直不被发现（5.4）
+	for rn in CharacterManager._roll_incest_rumor(char, sib_idx, false):
+		_add_log(rn)
+	_mark_acted(cooldown_id)
+	_refresh_display()
+
+func _do_cover_incest_rumor(member_data: Dictionary, sib_idx: int) -> void:
+	"""掩人耳目：花 20 石压低风声"""
+	var result = CharacterManager.cover_incest_rumor(GameState.current_character, sib_idx)
+	_add_log(result.get("message", ""))
+	_refresh_display()
+
+func _do_marry_out_sister_incest(member_data: Dictionary, sib_idx: int) -> void:
+	"""异姓远嫁姐姐——风声清零，一劳永逸"""
+	var result = CharacterManager.marry_out_sister(GameState.current_character, sib_idx)
+	_add_log(result.get("message", ""))
+	_refresh_display()
 func _do_marry_out_daughter(member_data: Dictionary) -> void:
 	"""嫁女操作"""
 	var cooldown_id = "marry_child_" + member_data.get("name", "")

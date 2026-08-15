@@ -1135,6 +1135,43 @@ func process_pregnancies(character: Dictionary) -> Array:
 			mother["is_pregnant"] = false
 			mother["pregnancy_remaining"] = 0
 			notices.append_array(_deliver_birth(character, row, mother, i))
+	# 姐弟乱伦孕期——独立于妻妾表的分娩通路（5.1）
+	var siblings = GameState.family_data.get("siblings", [])
+	for i in range(siblings.size()):
+		var sis = siblings[i]
+		if sis.is_empty() or not sis.get("is_pregnant", false) or sis.get("pregnancy_type", "") != "incest":
+			continue
+		var remaining = sis.get("pregnancy_remaining", 3)
+		if randf() < 0.5:
+			if remaining == 3:
+				notices.append("🤰 姐%s腹中动静异常——她日夜难安，神情惶惶。" % sis.get("name", ""))
+			elif remaining == 2:
+				notices.append("🤰 姐%s的胎一天天大起来——府中似有人起疑。" % sis.get("name", ""))
+			elif remaining == 1:
+				notices.append("🤰 姐%s临盆在即——此事若泄，宗族之耻也。" % sis.get("name", ""))
+		sis["pregnancy_remaining"] = remaining - 1
+		if sis["pregnancy_remaining"] > 0:
+			continue
+		# 分娩——孽种
+		sis["is_pregnant"] = false
+		sis["pregnancy_remaining"] = 0
+		sis["pregnancy_type"] = ""
+		var child = generate_child(character, "sister", i, 0, true)
+		# 孽种资质受损：属性-1~2
+		for akey in ["con", "int", "str", "cha", "vir", "luk"]:
+			child["attributes"][akey] = max(3, child["attributes"].get(akey, 10) - randi_range(1, 2))
+		var children = character.relationships.get("children", [])
+		children.append(child)
+		character.relationships.children = children
+		_append_to_family_tree(child)
+		var kind = "男婴" if child.get("gender", "male") == "male" else "女婴"
+		notices.append("🕯 姐%s诞下一名%s——眉眼间有几分像你，族人多有侧目。（孽种）" % [sis.get("name", ""), kind])
+		# 出生即丑闻+2，和睦-10
+		modify_scandal_level(2)
+		GameState.household_data["harmony"] = max(0, GameState.household_data.get("harmony", 60) - 10)
+		add_household_event("birth", "%s诞下孽种" % sis.get("name", ""))
+		# 出生败露检查——孽种落地，风声更易走漏
+		notices.append_array(_roll_incest_rumor(character, i, true))
 	return notices
 
 func _deliver_birth(character: Dictionary, row: Dictionary, mother: Dictionary, mother_index: int) -> Array:
@@ -1771,6 +1808,11 @@ func check_sister_events(character: Dictionary) -> Dictionary:
 		# 检测姐妹是否已婚
 		if _sibling_is_married(sib):
 			continue
+		# 已乱伦 / 已有身孕——不再触发被动事件（5.3）
+		if sib.get("has_incest", false):
+			continue
+		if sib.get("is_pregnant", false):
+			continue
 		var aff = get_sibling_affection(i)
 		if aff < 80:
 			continue
@@ -1850,11 +1892,16 @@ func resolve_sister_event(character: Dictionary, event: Dictionary, choice: int)
 						"discovered": false,
 					})
 					modify_scandal_level(2)
+					# 标记已乱伦——此后不再触发被动事件（5.3）
+					GameState.family_data.get("siblings", [])[i]["has_incest"] = true
 					# 怀孕判定
 					var preg_result = handle_incest_pregnancy(character, i)
 					result.message = "那一夜，你们逾越了禁忌……" + preg_result.get("message", "")
 					if preg_result.get("pregnant", false):
 						result.message += " 更糟的是，" + preg_result.get("pregnancy_note", "")
+					# 风声判定（5.4）
+					for r in _roll_incest_rumor(character, i, false):
+						result.message += " " + r
 				1:  # 克制
 					modify_sibling_affection(i, -15)
 					result.message = "你在最后一刻清醒过来，推开了她。她掩面哭泣而去，此后数日都躲着你。"
@@ -1895,10 +1942,16 @@ func handle_incest_pregnancy(character: Dictionary, sister_index: int) -> Dictio
 	if sister_index < 0 or sister_index >= siblings.size():
 		return {"pregnant": false, "message": ""}
 	var sister = siblings[sister_index]
+	# 严格 gate：双方必须成年（≥16），未成年任何入口拒绝（5.8）
+	var player_age = get_character_age(character)
+	var sib_age = GameState.current_year - sister.get("birth_year", GameState.current_year)
+	if player_age < 16 or sib_age < 16:
+		return {"pregnant": false, "message": "双方尚未成年，礼法不容，不可逾越。"}
+	if sister.get("is_pregnant", false):
+		return {"pregnant": false, "message": "她已有身孕，不可再行此事。"}
 	var fertility = 8.0  # 基础受孕率8%
 	var cha_bonus = DiceSystem.attr_to_bonus(character.attributes.get("cha", 10))
 	fertility += cha_bonus * 1.0  # CHA加成每点+1%
-	var sib_age = GameState.current_year - sister.get("birth_year", GameState.current_year)
 	if sib_age > 30:
 		fertility = max(2.0, fertility - (sib_age - 30) * 1.0)
 	if randf() * 100.0 < fertility:
@@ -1949,6 +2002,102 @@ func modify_scandal_level(delta: int) -> void:
 	var current = GameState.family_data.get("scandal_level", 0)
 	GameState.family_data["scandal_level"] = clampi(current + delta, 0, 5)
 
+# ============================================================
+# 姐弟乱伦线——风声/败露/掩蔽（成人限定·高代价禁忌）
+# ============================================================
+func _roll_incest_rumor(character: Dictionary, sister_index: int, birth_boost: bool) -> Array:
+	"""单次乱伦后的风声判定：基础20% + 孕期+15% + 孽种落地+10% + 妻察觉+10% + 和睦低+5% + 声望高+10%。
+	命中则风声+3~5；风声≥10 即触发败露。未达阈值则永远秘密。返回通知列表。"""
+	var notices: Array = []
+	var siblings = GameState.family_data.get("siblings", [])
+	if sister_index < 0 or sister_index >= siblings.size():
+		return notices
+	var sister = siblings[sister_index]
+	var chance = 20.0
+	if sister.get("is_pregnant", false):
+		chance += 15.0
+	if birth_boost:
+		chance += 10.0
+	if is_married(character):
+		var spouse = character.relationships.get("spouse", {})
+		if spouse.get("loyalty", 80) < 50:
+			chance += 10.0
+	if GameState.household_data.get("harmony", 60) < 40:
+		chance += 5.0
+	if character.get("derived", {}).get("reputation", 0) >= 60:
+		chance += 10.0
+	if randf() * 100.0 < chance:
+		sister["incest_rumor"] = sister.get("incest_rumor", 0) + randi_range(3, 5)
+		notices.append("😨 风声似有走漏——府中下人窃窃私语。（风声 %d）" % sister.get("incest_rumor", 0))
+		if sister.get("incest_rumor", 0) >= 10:
+			notices.append_array(_expose_incest(character, sister_index))
+	return notices
+
+func _expose_incest(character: Dictionary, sister_index: int) -> Array:
+	"""风声≥10 败露：丑闻+3、声望-30、妻忠诚-20、宗族除名/夺爵风险。返回通知列表。"""
+	var notices: Array = []
+	var siblings = GameState.family_data.get("siblings", [])
+	if sister_index < 0 or sister_index >= siblings.size():
+		return notices
+	var sister = siblings[sister_index]
+	sister["incest_exposed"] = true
+	modify_scandal_level(3)
+	CharacterManager.modify_reputation(character, -30)
+	notices.append("🔥 丑闻败露！你与姐%s的乱伦之事传遍乡里——宗族哗然，声望-30，丑闻+3！" % sister.get("name", ""))
+	if is_married(character):
+		var spouse = character.relationships.get("spouse", {})
+		spouse["loyalty"] = max(0, spouse.get("loyalty", 80) - 20)
+		notices.append("😠 妻子%s与你反目成仇——忠诚-20，几欲和离！" % spouse.get("name", ""))
+	# 宗族除名/夺爵风险（诸侯及以上，三成概率）
+	if character.get("social_level", 3) >= 5 and randf() < 0.3:
+		var old_level: int = character.get("social_level", 5)
+		demote_character(character, max(2, old_level - 1))
+		notices.append("🏛 宗族震怒，夺你封爵——你被降为%s，继承权亦被剥夺！" % SOCIAL_CLASSES[max(2, old_level - 1)].display)
+	return notices
+
+func cover_incest_rumor(character: Dictionary, sister_index: int) -> Dictionary:
+	"""掩人耳目：花 20 石，风声-5。"""
+	if GameState.family_data.wealth < 20:
+		return {"success": false, "message": "掩人耳目需 20 石，钱财不足。"}
+	var siblings = GameState.family_data.get("siblings", [])
+	if sister_index < 0 or sister_index >= siblings.size():
+		return {"success": false, "message": "找不到这位姐妹。"}
+	var sister = siblings[sister_index]
+	if sister.get("incest_rumor", 0) <= 0:
+		return {"success": false, "message": "暂无风声外泄，不必多此一举。"}
+	CharacterManager.modify_wealth(-20)
+	sister["incest_rumor"] = max(0, sister.get("incest_rumor", 0) - 5)
+	return {"success": true, "message": "你花 20 石打点上下，流言稍息——风声-5。"}
+
+func marry_out_sister(character: Dictionary, sister_index: int) -> Dictionary:
+	"""异姓远嫁姐姐：风声清零、移出可乱伦名单，一劳永逸。"""
+	var siblings = GameState.family_data.get("siblings", [])
+	if sister_index < 0 or sister_index >= siblings.size():
+		return {"success": false, "message": "找不到这位姐妹。"}
+	var sister = siblings[sister_index]
+	if sister.get("is_pregnant", false):
+		return {"success": false, "message": "她已有身孕，此时远嫁恐惹非议。"}
+	if _sibling_is_married(sister):
+		return {"success": false, "message": "她已有人家。"}
+	var spouse_surname = ""
+	for s in EIGHT_SURNAMES:
+		if s != character.surname and s != sister.get("surname", ""):
+			spouse_surname = s
+			break
+	if spouse_surname == "":
+		spouse_surname = "杞"
+	var bride_price = 10 + randi_range(0, 10)
+	CharacterManager.modify_wealth(bride_price)
+	sister["incest_rumor"] = 0
+	sister["is_pregnant"] = false
+	sister["has_incest"] = false
+	sister["incest_exposed"] = false
+	sister["is_married"] = true
+	sister["spouse"] = generate_spouse(spouse_surname, "", _compute_age(sister) + randi_range(-2, 6))
+	sister["married_year"] = GameState.current_year
+	return {"success": true, "bride_price": bride_price,
+		"message": "你将姐%s远嫁%s国——风言风语随之烟消云散，她离了本家，你得以脱身。聘礼 %d 石。" % [sister.get("name", ""), spouse_surname, bride_price]}
+
 func get_di_shu_children(character: Dictionary) -> Dictionary:
 	"""按嫡庶分类子女。返回 {di: Array, shu: Array}"""
 	var children = character.relationships.get("children", [])
@@ -1957,6 +2106,8 @@ func get_di_shu_children(character: Dictionary) -> Dictionary:
 	for c in children:
 		if not c.get("is_alive", true):
 			continue
+		if c.get("is_incest", false):
+			continue  # 孽种贱出——不列嫡庶
 		if c.get("mother_type", "wife") == "wife":
 			di.append(c)
 		else:
@@ -1973,6 +2124,8 @@ func get_inheritance_order(character: Dictionary) -> Array:
 	for c in children:
 		if not c.get("is_alive", true) or c.get("gender", "male") != "male":
 			continue
+		if c.get("is_incest", false):
+			continue  # 孽种贱出——无继承权
 		var age = GameState.current_year - c.get("birth_year", GameState.current_year)
 		if age < 16:
 			continue
@@ -2653,12 +2806,32 @@ func update_parents_aging() -> Dictionary:
 			if parents.mother.age > 55 and randf() < 0.08:
 				parents.mother.is_alive = false
 				pending_funeral.append({"relation": "mother", "name": parents.mother.get("name", ""), "age": parents.mother.age})
-		for sibling in GameState.family_data.get("siblings", []):
-			if sibling.get("is_alive", false):
-				sibling.age = _compute_age(sibling)
-				if sibling.age > 55 and randf() < 0.06:
-					sibling.is_alive = false
-					notices.append("☠ 手足%s%s去世，享年%d岁。" % [sibling.get("surname", ""), sibling.get("name", ""), sibling.age])
+		var sibs_arr = GameState.family_data.get("siblings", [])
+		for si in range(sibs_arr.size()):
+			var sibling = sibs_arr[si]
+			if not sibling.get("is_alive", true):
+				continue
+			sibling["age"] = _compute_age(sibling)
+			if sibling.age > 55 and randf() < 0.06:
+				sibling["is_alive"] = false
+				sibling["is_pregnant"] = false
+				notices.append("☠ 手足%s%s去世，享年%d岁。" % [sibling.get("surname", ""), sibling.get("name", ""), sibling.age])
+			elif sibling.get("gender", "") == "female" and sibling.age >= 16 and not _sibling_is_married(sibling) and not sibling.get("is_pregnant", false):
+				# 成年姐妹异姓外嫁——消除"永孕/永不老化"bug（5.6）
+				if randf() < 0.03:
+					var spouse_surname = ""
+					for s in EIGHT_SURNAMES:
+						if s != GameState.current_character.get("surname", "") and s != sibling.get("surname", ""):
+							spouse_surname = s
+							break
+					if spouse_surname == "":
+						spouse_surname = "杞"
+					sibling["is_married"] = true
+					sibling["spouse"] = generate_spouse(spouse_surname, "", sibling.age + randi_range(-2, 6))
+					sibling["married_year"] = GameState.current_year
+					sibling["incest_rumor"] = 0
+					sibling["is_pregnant"] = false
+					notices.append("🏮 姐%s异姓外嫁%s国——从此天各一方，往事随风。" % [sibling.get("name", ""), spouse_surname])
 	# 配偶老化
 	var char = GameState.current_character
 	if not char.is_empty() and CharacterManager.is_married(char):
