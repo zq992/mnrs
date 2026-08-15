@@ -1012,13 +1012,53 @@ func generate_child(character: Dictionary, mother_type: String = "wife", mother_
 		"is_separated": false,
 	}
 
-func test_spouse_loyalty(character: Dictionary) -> Dictionary:
-	"""考察妻子忠诚度。返回 {loyalty: int, assessment: str, message: str}"""
-	var spouse = character.relationships.get("spouse", {})
-	if spouse.is_empty():
-		return {"loyalty": 0, "assessment": "none", "message": "你尚未娶妻。"}
-	var loyalty = spouse.get("loyalty", 80)
-	var years_married = GameState.current_year - spouse.get("married_year", GameState.current_year)
+func loyalty_band(l: int) -> String:
+	"""忠诚模糊档位：≥80忠诚 / ≥60尚可 / ≥40有隙 / <40离心"""
+	if l >= 80:
+		return "忠诚"
+	elif l >= 60:
+		return "尚可"
+	elif l >= 40:
+		return "有隙"
+	return "离心"
+
+func _consort_member(character: Dictionary, mother_type: String, mother_index: int) -> Dictionary:
+	"""按母亲类型/索引取妻妾字典（wife 取 relationships.spouse）"""
+	var arr: Array = []
+	match mother_type:
+		"wife":
+			return character.relationships.get("spouse", {})
+		"concubine":
+			arr = GameState.family_data.get("concubines", [])
+		"furen":
+			arr = GameState.family_data.get("furens", [])
+		"ying_qie":
+			arr = GameState.family_data.get("ying_qie", [])
+		"tongfang":
+			arr = GameState.family_data.get("tongfangs", [])
+	if mother_index >= 0 and mother_index < arr.size():
+		return arr[mother_index]
+	return {}
+
+func _consort_label(mother_type: String) -> String:
+	"""妻妾类型的中文称呼"""
+	match mother_type:
+		"wife": return "正妻"
+		"concubine": return "妾室"
+		"furen": return "夫人"
+		"ying_qie": return "媵妾"
+		"tongfang": return "通房丫头"
+	return "妻"
+
+func test_spouse_loyalty(character: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> Dictionary:
+	"""考察妻妾忠诚度（模糊）。返回 {loyalty: int, assessment: str, message: str}"""
+	var target = _consort_member(character, mother_type, mother_index)
+	var label = _consort_label(mother_type)
+	if target.is_empty():
+		if mother_type == "wife":
+			return {"loyalty": 0, "assessment": "none", "message": "你尚未娶妻。"}
+		return {"loyalty": 0, "assessment": "none", "message": "找不到这位%s。" % label}
+	var loyalty = target.get("loyalty", 50)
 	# INT掷骰——判断忠诚度
 	var int_bonus = DiceSystem.attr_to_bonus(character.attributes.get("int", 10))
 	var roll = DiceSystem.roll_dice("2d6", int_bonus, 0)
@@ -1039,42 +1079,45 @@ func test_spouse_loyalty(character: Dictionary) -> Dictionary:
 		reported_loyalty = loyalty + randi_range(-30, 30)
 	reported_loyalty = clampi(reported_loyalty, 0, 100)
 	if reported_loyalty >= 80:
-		assessment = "坚贞不渝"; msg = "妻子对你忠贞不二（忠诚度约%d）。" % reported_loyalty
+		assessment = "坚贞不渝"; msg = "%s对你忠贞不二（忠诚度约%d）。" % [label, reported_loyalty]
 	elif reported_loyalty >= 60:
-		assessment = "尚算安稳"; msg = "妻子还算安分（忠诚度约%d）。" % reported_loyalty
+		assessment = "尚算安稳"; msg = "%s还算安分（忠诚度约%d）。" % [label, reported_loyalty]
 	elif reported_loyalty >= 40:
-		assessment = "略有微词"; msg = "妻子似有不满（忠诚度约%d）。" % reported_loyalty
+		assessment = "略有微词"; msg = "%s似有不满（忠诚度约%d）。" % [label, reported_loyalty]
 	elif reported_loyalty >= 20:
-		assessment = "心有他属"; msg = "妻子心思恐已不在家中（忠诚度约%d）……" % reported_loyalty
+		assessment = "心有他属"; msg = "%s心思恐已不在家中（忠诚度约%d）……" % [label, reported_loyalty]
 	else:
-		assessment = "貌合神离"; msg = "妻子恐已心生离意（忠诚度约%d）！" % reported_loyalty
+		assessment = "貌合神离"; msg = "%s恐已心生离意（忠诚度约%d）！" % [label, reported_loyalty]
 	if accuracy > 0:
 		msg += "（你不敢完全确定。）"
 	return {"loyalty": reported_loyalty, "assessment": assessment, "message": msg, "accuracy": accuracy}
 
-func boost_spouse_loyalty(character: Dictionary) -> Dictionary:
-	"""通过礼物与关怀大幅提升妻子忠诚度。返回 {success, old_loyalty, new_loyalty, cost, message}"""
-	var spouse = character.relationships.get("spouse", {})
-	if spouse.is_empty():
-		return {"success": false, "message": "你尚未娶妻。"}
+func boost_spouse_loyalty(character: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> Dictionary:
+	"""通过礼物与关怀提升妻妾忠诚度。返回 {success, old_loyalty, new_loyalty, cost, message}"""
+	var target = _consort_member(character, mother_type, mother_index)
+	var label = _consort_label(mother_type)
+	if target.is_empty():
+		if mother_type == "wife":
+			return {"success": false, "message": "你尚未娶妻。"}
+		return {"success": false, "message": "找不到这位%s。" % label}
 	var cost = 15  # 花费15石
 	if GameState.family_data.wealth < cost:
-		return {"success": false, "message": "需至少%d石才能博妻子欢心。" % cost}
+		return {"success": false, "message": "需至少%d石才能博%s欢心。" % [cost, label]}
 	# CHA掷骰决定效果
 	var cha_bonus = DiceSystem.attr_to_bonus(character.attributes.get("cha", 10))
 	var roll = DiceSystem.roll_dice("2d6", cha_bonus, 0)
 	var tier = roll.get("tier", 2)
-	var old_loyalty = spouse.get("loyalty", 80)
+	var old_loyalty = target.get("loyalty", 50)
 	var boost = 0
 	var msg = ""
 	match tier:
-		0: boost = 30; msg = "妻子感动不已"
-		1: boost = 20; msg = "妻子心花怒放"
-		2: boost = 15; msg = "妻子颇为欢喜"
-		3: boost = 8; msg = "妻子稍感欣慰"
-	boost = int(round(boost * _personality_swing(spouse)))  # 性格影响受赠反应
+		0: boost = 30; msg = "%s感动不已" % label
+		1: boost = 20; msg = "%s心花怒放" % label
+		2: boost = 15; msg = "%s颇为欢喜" % label
+		3: boost = 8; msg = "%s稍感欣慰" % label
+	boost = int(round(boost * _personality_swing(target)))  # 性格影响受赠反应
 	var new_loyalty = min(100, old_loyalty + boost)
-	spouse["loyalty"] = new_loyalty
+	target["loyalty"] = new_loyalty
 	CharacterManager.modify_wealth(-cost)
 	return {"success": true, "old_loyalty": old_loyalty, "new_loyalty": new_loyalty,
 		"cost": cost, "message": "%s，忠诚+%d。花费%d石。" % [msg, boost, cost]}

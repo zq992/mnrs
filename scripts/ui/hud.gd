@@ -4325,7 +4325,7 @@ func _build_family_content() -> void:
 		var preg_info = ""
 		if spouse.get("is_pregnant", false):
 			preg_info = "  🤰%d季" % spouse.get("pregnancy_remaining", 0)
-		var sp_text := "配偶: %s%s · %d岁%s" % [spouse.surname, spouse.name, CharacterManager._compute_age(spouse), preg_info]
+		var sp_text := "配偶: %s%s · %d岁 · 忠诚：%s%s" % [spouse.surname, spouse.name, CharacterManager._compute_age(spouse), CharacterManager.loyalty_band(spouse.get("loyalty", 80)), preg_info]
 		var sp_btn := _make_family_button(sp_text, "spouse", spouse)
 		_family_vbox.add_child(sp_btn)
 
@@ -4383,7 +4383,7 @@ func _build_family_content() -> void:
 				var preg_info = ""
 				if cn.get("is_pregnant", false):
 					preg_info = "  🤰%d季" % cn.get("pregnancy_remaining", 0)
-				var cn_text := "妾: %s%s · %d岁 · 忠诚%d%s" % [cn.surname, cn.name, CharacterManager._compute_age(cn), cn.get("loyalty", 50), preg_info]
+				var cn_text := "妾: %s%s · %d岁 · 忠诚：%s%s" % [cn.surname, cn.name, CharacterManager._compute_age(cn), CharacterManager.loyalty_band(cn.get("loyalty", 50)), preg_info]
 				var cn_btn := _make_family_button(cn_text, "concubine", cn)
 				cn_btn.visible = cn_alive
 				_family_vbox.add_child(cn_btn)
@@ -4402,7 +4402,7 @@ func _build_family_content() -> void:
 				var yq_preg: String = ""
 				if yq.get("is_pregnant", false):
 					yq_preg = "  🤰%d季" % yq.get("pregnancy_remaining", 0)
-				var yq_text := "媵: %s%s · %d岁%s" % [yq.surname, yq.name, CharacterManager._compute_age(yq), yq_preg]
+				var yq_text := "媵: %s%s · %d岁 · 忠诚：%s%s" % [yq.surname, yq.name, CharacterManager._compute_age(yq), CharacterManager.loyalty_band(yq.get("loyalty", 50)), yq_preg]
 				var yq_btn := _make_family_button(yq_text, "ying_qie", yq)
 				_family_vbox.add_child(yq_btn)
 		# ── 夫人（天子）──
@@ -4419,7 +4419,7 @@ func _build_family_content() -> void:
 				var fr_preg: String = ""
 				if fr.get("is_pregnant", false):
 					fr_preg = "  🤰%d季" % fr.get("pregnancy_remaining", 0)
-				var fr_text := "夫人: %s%s · %d岁%s" % [fr.surname, fr.name, CharacterManager._compute_age(fr), fr_preg]
+				var fr_text := "夫人: %s%s · %d岁 · 忠诚：%s%s" % [fr.surname, fr.name, CharacterManager._compute_age(fr), CharacterManager.loyalty_band(fr.get("loyalty", 50)), fr_preg]
 				var fr_btn := _make_family_button(fr_text, "furen", fr)
 				_family_vbox.add_child(fr_btn)
 		# ── 通房 ──
@@ -4436,7 +4436,7 @@ func _build_family_content() -> void:
 				var tf_preg: String = ""
 				if tf.get("is_pregnant", false):
 					tf_preg = "  🤰%d季" % tf.get("pregnancy_remaining", 0)
-				var tf_text := "通房: %s%s · %d岁%s" % [tf.surname, tf.name, CharacterManager._compute_age(tf), tf_preg]
+				var tf_text := "通房: %s%s · %d岁 · 忠诚：%s%s" % [tf.surname, tf.name, CharacterManager._compute_age(tf), CharacterManager.loyalty_band(tf.get("loyalty", 50)), tf_preg]
 				var tf_btn := _make_family_button(tf_text, "tongfang", tf)
 				_family_vbox.add_child(tf_btn)
 
@@ -4564,8 +4564,8 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_spouse"})
 			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data), "cooldown": "bond_spouse"})
 			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_wife(member_data), "cooldown": "try_baby_wife", "self_gated": true})
-			actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data), "cooldown": "test_spouse_loyalty", "self_gated": true})
-			actions.append({"text": "🎁 赏赐博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data), "cooldown": "boost_spouse_loyalty", "self_gated": true})
+			actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data, "wife", 0), "cooldown": "test_spouse_loyalty", "self_gated": true})
+			actions.append({"text": "🎁 赏赐博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data, "wife", 0), "cooldown": "boost_spouse_loyalty", "self_gated": true})
 		"child":
 			actions.append({"text": "💬 谈心", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_child"})
 			# 子索引：按 member_data 在子女数组里查位置（教导冷却按人区分）
@@ -4596,6 +4596,8 @@ func _get_family_actions(relation_type: String, member_data: Dictionary) -> Arra
 					cn_idx = i
 					break
 			actions.append({"text": "🌙 求子（同房）", "callback": func(): _do_try_for_baby_concubine(member_data), "cooldown": "try_baby_concubine_" + str(cn_idx), "self_gated": true})
+			actions.append({"text": "🔍 考察忠诚", "callback": func(): _do_test_spouse_loyalty(member_data, "concubine", cn_idx), "cooldown": "test_concubine_" + str(cn_idx), "self_gated": true})
+			actions.append({"text": "🎁 安抚博欢心", "callback": func(): _do_boost_spouse_loyalty(member_data, "concubine", cn_idx), "cooldown": "boost_concubine_" + str(cn_idx), "self_gated": true})
 		"furen", "ying_qie", "tongfang":
 			actions.append({"text": "💬 交谈", "callback": func(): _do_family_talk(relation_type, member_data), "cooldown": "talk_" + relation_type})
 			actions.append({"text": "❤️ 亲近", "callback": func(): _do_family_bond(member_data, "bond_" + relation_type), "cooldown": "bond_" + relation_type})
@@ -4732,27 +4734,29 @@ func _do_concubine_bond(member_data: Dictionary) -> void:
 	GameState.current_character["_last_bond_season"] = 0
 	_mark_acted("bond_concubine")
 
-func _do_test_spouse_loyalty(member_data: Dictionary) -> void:
-	"""考察妻子忠诚度"""
-	if not _can_act("test_spouse_loyalty"):
-		_add_log("本季已考察过妻子忠诚，下季再来吧。")
+func _do_test_spouse_loyalty(member_data: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> void:
+	"""考察妻妾忠诚（模糊评估）"""
+	var cooldown_id: String = "test_spouse_loyalty" if mother_type == "wife" else "test_concubine_%d" % mother_index
+	if not _can_act(cooldown_id):
+		_add_log("本季已考察过这位妻妾的忠诚，下季再来吧。")
 		return
-	var result = CharacterManager.test_spouse_loyalty(GameState.current_character)
+	var result = CharacterManager.test_spouse_loyalty(GameState.current_character, mother_type, mother_index)
 	_add_log(result.get("message", ""))
-	_mark_acted("test_spouse_loyalty")
+	_mark_acted(cooldown_id)
 	_refresh_display()
 
-func _do_boost_spouse_loyalty(member_data: Dictionary) -> void:
-	"""赏赐博妻子欢心"""
-	if not _can_act("boost_spouse_loyalty"):
-		_add_log("本季已赏赐过妻子，下季再来吧。")
+func _do_boost_spouse_loyalty(member_data: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> void:
+	"""赏赐博妻妾欢心"""
+	var cooldown_id: String = "boost_spouse_loyalty" if mother_type == "wife" else "boost_concubine_%d" % mother_index
+	if not _can_act(cooldown_id):
+		_add_log("本季已赏赐过这位妻妾，下季再来吧。")
 		return
-	var result = CharacterManager.boost_spouse_loyalty(GameState.current_character)
+	var result = CharacterManager.boost_spouse_loyalty(GameState.current_character, mother_type, mother_index)
 	if result.get("success", false):
-		_add_log("🎁 " + result.message + " 花费%d石。" % result.cost)
+		_add_log("🎁 " + result.message)
 	else:
 		_add_log(result.message)
-	_mark_acted("boost_spouse_loyalty")
+	_mark_acted(cooldown_id)
 	
 func _do_try_for_baby(mother_type: String, index: int) -> void:
 	"""统一同房/求子判定：CON掷骰定档；大成功必孕（force_success），消除"大成功却未受孕"矛盾"""
