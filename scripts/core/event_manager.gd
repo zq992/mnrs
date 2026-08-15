@@ -355,9 +355,18 @@ func _apply_effects(effects_str: String) -> Array:
 				applied.append({"type": "fief_set", "value": place})
 			continue
 
-		# 找最后一个 +/- 之后跟数字
+		# 王命授官（无 +/- 数字的特殊效果，如 "official_position:司徒"）
+		if part.begins_with("official_position:"):
+			var pos_name = part.substr(17).strip_edges()
+			if not pos_name.is_empty():
+				var c0 = GameState.current_character
+				c0["official_position"] = pos_name
+				applied.append({"type": "official_position", "value": pos_name})
+			continue
+
+		# 找最后一个 +/- 之后跟数字（rfind = 从右找最后出现位置）
 		for op_char in ["+", "-"]:
-			var idx = part.find_last(op_char)
+			var idx = part.rfind(op_char)
 			if idx > 0:
 				var attr = part.substr(0, idx)
 				var value_str = part.substr(idx + 1)

@@ -680,6 +680,386 @@
       ],
       "illustration": "res://resources/textures/events/event_court_audience.png",
       "once": true
+    },
+    {
+      "id": "wz_sanjian_rebellion",
+      "type": "identity",
+      "title": "三监之乱",
+      "text": "武王崩后，管叔、蔡叔与武庚联合作乱，三监之地烽烟骤起。你尚在总角之年，从家人的愁容与仓皇中，隐隐感到一场席卷宗周的大乱正在逼近。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "once": true,
+      "prerequisites": [
+        {
+          "type": "year_range",
+          "value": [
+            -1045,
+            -1039
+          ]
+        }
+      ],
+      "choices": [
+        {
+          "text": "父亲随周公东征平叛",
+          "resolution": {
+            "attr": "str",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你父作战勇猛，阵前擒获叛将——周公亲口嘉许，家门自此号为“武烈之家”。",
+              "success": "你父随大军东征归来，虽风尘仆仆，却带回了军功与封赏。",
+              "partial": "你父随军征战，家中数月不见音讯，你与母亲日日悬心。",
+              "failure": "你父在乱军中受挫负伤，家道一度中落。"
+            }
+          },
+          "effects": {
+            "critical": "military_merit+2, reputation+5",
+            "success": "military_merit+1, reputation+3",
+            "partial": "reputation+1",
+            "failure": "reputation-2, health-1"
+          }
+        },
+        {
+          "text": "举家避祸，远走乡野",
+          "resolution": {
+            "attr": "luk",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你一家避入深乡，躲过大乱——乱平后平安归乡，还因施粥乡里得了善名。",
+              "success": "你一家避走乡野，虽过了数年清苦日子，人丁无虞。",
+              "partial": "避祸途中遗失不少家财，所幸家人无恙。",
+              "failure": "避祸途中遭遇乱兵，你受惊成疾，久病难愈。"
+            }
+          },
+          "effects": {
+            "critical": "wealth+15, reputation+3",
+            "success": "health+2",
+            "partial": "wealth-5",
+            "failure": "health-3, reputation-1"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
+    },
+    {
+      "id": "wz_zhougong_return",
+      "type": "identity",
+      "title": "周公还政",
+      "text": "周公旦摄政七载，制礼作乐，天下归心。如今成王年长，周公决意还政于王——镐京朝堂暗流涌动：拥戴新君亲政，还是感念周公摄政之德？你也要表一个态度。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "once": true,
+      "prerequisites": [
+        {
+          "type": "year_range",
+          "value": [
+            -1036,
+            -1032
+          ]
+        },
+        {
+          "type": "min_age",
+          "value": 12
+        }
+      ],
+      "choices": [
+        {
+          "text": "当众拥戴成王亲政",
+          "resolution": {
+            "attr": "cha",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你慷慨陈词，力主成王亲政——新君龙颜大悦，将你引为忠直之臣。",
+              "success": "你明言拥戴成王，言辞得体，成王对你留下了印象。",
+              "partial": "你随众附和，并未多言。",
+              "failure": "你的表态被政敌曲解，成王对你生了疑虑。"
+            }
+          },
+          "effects": {
+            "critical": "king_favor+15, reputation+5",
+            "success": "king_favor+10, reputation+2",
+            "partial": "reputation+1",
+            "failure": "king_favor-5"
+          }
+        },
+        {
+          "text": "盛赞周公制礼作乐之功",
+          "resolution": {
+            "attr": "int",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你当众颂扬周公功业，周公旧部引你为知己——日后仕途多受提携。",
+              "success": "你颂扬周公之德，颇得老臣好感。",
+              "partial": "你的话无人在意，风头被别家抢去。",
+              "failure": "你的言论传至成王耳中，被疑为周公党羽。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+8, ambition+2",
+            "success": "reputation+3",
+            "partial": "reputation+1",
+            "failure": "king_favor-8"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_chengkang_ceming",
+      "type": "identity",
+      "title": "成康册命",
+      "text": "成康之治，天下安宁。天子于宗庙行册命大典，选贤任能、封赏功臣——你亦获召入册，当有一番际遇。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "once": true,
+      "prerequisites": [
+        {
+          "type": "year_range",
+          "value": [
+            -1005,
+            -1000
+          ]
+        },
+        {
+          "type": "min_age",
+          "value": 16
+        }
+      ],
+      "choices": [
+        {
+          "text": "应召入朝，受任官职",
+          "resolution": {
+            "attr": "int",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "册命大典之上，天子亲授你朝中要职——一夕之间，名动镐京。",
+              "success": "你受王命得任一官，自此位列朝班。",
+              "partial": "你获召见却未得实职，只得了个闲差。",
+              "failure": "你在典礼上失仪，未能获任。"
+            }
+          },
+          "effects": {
+            "critical": "official_position:大夫, reputation+8, king_favor+8",
+            "success": "reputation+5, king_favor+3",
+            "partial": "reputation+2",
+            "failure": "reputation-2"
+          }
+        },
+        {
+          "text": "奉王命出使诸侯列国",
+          "resolution": {
+            "attr": "cha",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你出使诸侯，不辱王命，诸侯皆称其能——声名远播，还带回厚赐。",
+              "success": "你顺利完成使命，受王嘉许。",
+              "partial": "你出使无功而返，行程平平。",
+              "failure": "你出使触怒诸侯，回国后遭太史斥责。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+8, wealth+10, king_favor+5",
+            "success": "reputation+4, wealth+5",
+            "partial": "reputation+1",
+            "failure": "reputation-3"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_court_audience.png"
+    },
+    {
+      "id": "wz_zhaowang_nanzheng",
+      "type": "identity",
+      "title": "昭王南征",
+      "text": "昭王三征荆楚，王师南渡汉水。荆楚之地水泽遍布、瘴气弥漫——这是博取军功的征途，也可能是葬身的险地。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "once": true,
+      "prerequisites": [
+        {
+          "type": "year_range",
+          "value": [
+            -982,
+            -977
+          ]
+        },
+        {
+          "type": "min_age",
+          "value": 16
+        }
+      ],
+      "choices": [
+        {
+          "text": "随王南征，搏个军功",
+          "resolution": {
+            "attr": "str",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你阵前斩将夺旗，威震荆楚——昭王亲记你名，凯旋之日论功行赏。",
+              "success": "你随王师征战，历经数战，安然归来。",
+              "partial": "你途中染上瘴疠，随军折返，养病数月。",
+              "failure": "汉水之畔王师溃败，你负伤突围，九死一生。"
+            }
+          },
+          "effects": {
+            "critical": "military_merit+3, reputation+8",
+            "success": "military_merit+1, reputation+3",
+            "partial": "health-3, military_merit+1",
+            "failure": "health-5, reputation-3"
+          }
+        },
+        {
+          "text": "留守宗邑，经营家业",
+          "resolution": {
+            "attr": "int",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "王师南征，京畿空虚——你趁机购置田产，家业大振。",
+              "success": "你留守家中，安稳经营，家财渐丰。",
+              "partial": "你留守无事，家业如常。",
+              "failure": "征丁频繁，你家劳力不足，田亩荒芜。"
+            }
+          },
+          "effects": {
+            "critical": "wealth+15",
+            "success": "wealth+6",
+            "partial": "",
+            "failure": "wealth-8"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
+    },
+    {
+      "id": "wz_guoren_baodong",
+      "type": "identity",
+      "title": "国人暴动",
+      "text": "厉王专利暴虐，国人道路以目，终至群起而攻。厉王出奔于彘，镐京无君，周召二相共和行政——乱世之中，或趁势而起，或明哲自保。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "once": true,
+      "prerequisites": [
+        {
+          "type": "year_range",
+          "value": [
+            -842,
+            -828
+          ]
+        },
+        {
+          "type": "min_age",
+          "value": 16
+        }
+      ],
+      "choices": [
+        {
+          "text": "助卿士维持秩序，效力共和",
+          "resolution": {
+            "attr": "int",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你在乱局中弹压暴民、安抚国人，二相看重你的干才——实权渐长。",
+              "success": "你协助维持秩序，得以参与共和政事。",
+              "partial": "你尽力维持，却收效甚微。",
+              "failure": "你在弹压中结怨国人，家中遭乱民打砸。"
+            }
+          },
+          "effects": {
+            "critical": "regency_power+10, reputation+5",
+            "success": "regency_power+5, reputation+2",
+            "partial": "reputation+1",
+            "failure": "wealth-10, reputation-3"
+          }
+        },
+        {
+          "text": "整兵自保，趁机扩张",
+          "resolution": {
+            "attr": "str",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你借乱世扩土募兵，一方势力悄然坐大。",
+              "success": "你自保有余，势力小有增长。",
+              "partial": "你守成自保，无甚起色。",
+              "failure": "你的扩张引来猜忌，被指为趁乱谋逆。"
+            }
+          },
+          "effects": {
+            "critical": "regency_power+8, military_merit+2",
+            "success": "regency_power+3",
+            "partial": "",
+            "failure": "reputation-8"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
+    },
+    {
+      "id": "wz_youwang_wangguo",
+      "type": "identity",
+      "title": "犬戎破镐京",
+      "text": "幽王烽火戏诸侯，诸侯离心。犬戎之兵终破镐京，幽王身死，宗周倾覆——镐京火起，你站在家族存亡的关口。",
+      "trigger_weight": {
+        "base": 8
+      },
+      "once": true,
+      "prerequisites": [
+        {
+          "type": "year_range",
+          "value": [
+            -782,
+            -771
+          ]
+        },
+        {
+          "type": "min_age",
+          "value": 16
+        }
+      ],
+      "choices": [
+        {
+          "text": "率家兵勤王",
+          "resolution": {
+            "attr": "str",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你率部苦战，护持王室东行——此役之后，你的忠义之名传遍天下。",
+              "success": "你率家兵勤王，虽未能挽大厦之将倾，亦尽忠职守。",
+              "partial": "你欲勤王而力有未逮，只保住了自家宗邑。",
+              "failure": "勤王之路遭遇犬戎主力，家兵折损大半。"
+            }
+          },
+          "effects": {
+            "critical": "reputation+12, military_merit+2, king_favor+10",
+            "success": "reputation+6, military_merit+1",
+            "partial": "reputation+1",
+            "failure": "health-4, wealth-10"
+          }
+        },
+        {
+          "text": "护家东迁，避祸洛邑",
+          "resolution": {
+            "attr": "luk",
+            "dice": "2d6",
+            "outcomes": {
+              "critical": "你料敌先机，携家东迁洛邑，一路平安——乱世中保全了全家。",
+              "success": "你举家东迁，虽路途颠簸，终得安身。",
+              "partial": "你仓皇东迁，遗失了不少家当。",
+              "failure": "东迁路上遭乱兵劫掠，损失惨重。"
+            }
+          },
+          "effects": {
+            "critical": "wealth+20, health+2",
+            "success": "wealth+8",
+            "partial": "wealth-5",
+            "failure": "wealth-15, health-2"
+          }
+        }
+      ],
+      "illustration": "res://resources/textures/events/event_martial_test.png"
     }
   ]
 }
