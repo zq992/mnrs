@@ -762,7 +762,7 @@ func try_birth(character: Dictionary) -> Dictionary:
 	"""被动生育已废弃——改用怀孕系统。"""
 	return {}
 
-func start_pregnancy(mother_type: String, mother_index: int = 0) -> Dictionary:
+func start_pregnancy(mother_type: String, mother_index: int = 0, force_success: bool = false) -> Dictionary:
 	"""开始怀孕。mother_type: 'wife' / 'concubine' / 'tongfang'。返回包含fertility信息。"""
 	var char = GameState.current_character
 	var fertility = FERTILITY_RATES.get(mother_type, 10.0)
@@ -773,8 +773,8 @@ func start_pregnancy(mother_type: String, mother_index: int = 0) -> Dictionary:
 	var age = get_character_age(char)
 	if age > 30:
 		fertility = max(2.0, fertility - (age - 30) * 1.0)
-	# 掷骰判定是否受孕
-	if randf() * 100.0 > fertility:
+	# 掷骰判定是否受孕（force_success：大成功必孕，跳过随机判定）
+	if not force_success and randf() * 100.0 > fertility:
 		var hint = ""
 		match mother_type:
 			"wife": hint = "妻子"
