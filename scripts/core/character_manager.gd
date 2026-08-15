@@ -897,14 +897,28 @@ func try_birth(character: Dictionary) -> Dictionary:
 func start_pregnancy(mother_type: String, mother_index: int = 0, force_success: bool = false) -> Dictionary:
 	"""开始怀孕。mother_type: 'wife' / 'concubine' / 'tongfang'。返回包含fertility信息。"""
 	var char = GameState.current_character
+	var mother = _consort_member(char, mother_type, mother_index)
+	_ensure_consort_fields(char, mother, mother_type)
 	var fertility = FERTILITY_RATES.get(mother_type, 10.0)
 	var cha_bonus = DiceSystem.attr_to_bonus(char.attributes.get("cha", 10))
 	# CHA加成：每点加2%
 	fertility += cha_bonus * 2.0
-	# 年龄衰减：30岁后每岁-1%
-	var age = get_character_age(char)
-	if age > 30:
-		fertility = max(2.0, fertility - (age - 30) * 1.0)
+	# 年龄衰减——改用母亲年龄（30岁后每岁-1%）
+	var mother_age = 0
+	if not mother.is_empty() and mother.has("birth_year"):
+		mother_age = GameState.current_year - mother.get("birth_year", GameState.current_year)
+	if mother_age > 30:
+		fertility = max(2.0, fertility - (mother_age - 30) * 1.0)
+	# 健康衰减——母体健康低于60后每点-0.1%
+	var mother_health = mother.get("health", 70)
+	if mother_health < 60:
+		fertility = max(2.0, fertility - (60 - mother_health) * 0.1)
+	# 子女软上限——≥15 超额每孩-3%，≥20 封顶
+	var child_count = char.relationships.get("children", []).size()
+	if child_count >= 20:
+		fertility = 0.0
+	elif child_count >= 15:
+		fertility = max(0.0, fertility - (child_count - 14) * 3.0)
 	# 掷骰判定是否受孕（force_success：大成功必孕，跳过随机判定）
 	if not force_success and randf() * 100.0 > fertility:
 		var hint = ""
@@ -1015,71 +1029,186 @@ func _consorts_table(character: Dictionary) -> Array:
 		"kind_household": "嫡",
 		"notice": "👶 喜得{kind}——{surname}{name}！",
 		"household": "正妻诞下{household_kind}{name}",
-		"base": 0.8, "default_loyalty": 80, "low_inc": 3.0, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 20,
+		"base": 0.8, "default_loyalty": 80, "default_health": 80, "default_intimacy": 50, "low_inc": 3.0, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 20,
 	})
 	rows.append({
 		"type": "concubine", "list": GameState.family_data.get("concubines", []),
 		"kind_household": "",
 		"notice": "👶 妾室{mom}喜得{kind}——{surname}{name}（庶出）！",
 		"household": "妾室{mom}诞下庶出子女",
-		"base": 1.5, "default_loyalty": 60, "low_inc": 3.0, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 20,
+		"base": 1.5, "default_loyalty": 60, "default_health": 70, "default_intimacy": 50, "low_inc": 3.0, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 20,
 	})
 	rows.append({
 		"type": "tongfang", "list": GameState.family_data.get("tongfangs", []),
 		"kind_household": "",
 		"notice": "👶 通房丫头{mom}喜得{kind}——{surname}{name}（婢生）！",
 		"household": "通房{mom}诞下婢生子",
-		"base": 2.0, "default_loyalty": 50, "low_inc": 4.0, "mid_inc": 3.5, "cha_inc": 2.5, "penalty": 15,
+		"base": 2.0, "default_loyalty": 50, "default_health": 65, "default_intimacy": 50, "low_inc": 4.0, "mid_inc": 3.5, "cha_inc": 2.5, "penalty": 15,
 	})
 	rows.append({
 		"type": "furen", "list": GameState.family_data.get("furens", []),
 		"kind_household": "",
 		"notice": "👑 夫人{mom}喜得{kind}——{surname}{name}（贵子）！",
 		"household": "夫人{mom}诞下贵子",
-		"base": 0.5, "default_loyalty": 85, "low_inc": 2.0, "mid_inc": 2.5, "cha_inc": 1.5, "penalty": 15,
+		"base": 0.5, "default_loyalty": 85, "default_health": 75, "default_intimacy": 50, "low_inc": 2.0, "mid_inc": 2.5, "cha_inc": 1.5, "penalty": 15,
 	})
 	rows.append({
 		"type": "ying_qie", "list": GameState.family_data.get("ying_qie", []),
 		"kind_household": "",
 		"notice": "🏰 媵妾{mom}喜得{kind}——{surname}{name}（媵出）！",
 		"household": "媵妾{mom}诞下媵出子女",
-		"base": 1.0, "default_loyalty": 70, "low_inc": 2.5, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 15,
+		"base": 1.0, "default_loyalty": 70, "default_health": 75, "default_intimacy": 50, "low_inc": 2.5, "mid_inc": 3.0, "cha_inc": 2.0, "penalty": 15,
 	})
 	return rows
 
 func process_pregnancies(character: Dictionary) -> Array:
-	"""每季推进孕期，分娩时触发。返回通知数组。（表驱动，行为与原5段一致）"""
+	"""每季推进孕期，分娩时触发。返回通知数组（字符串日志）；分娩结构化结果存 GameState.last_births 供 UI 弹窗。"""
 	var notices: Array = []
 	for row in _consorts_table(character):
 		for i in range(row.list.size()):
 			var mother = row.list[i]
-			if not mother.get("is_pregnant", false):
+			if mother.is_empty() or not mother.get("is_pregnant", false):
 				continue
-			mother["pregnancy_remaining"] = mother.get("pregnancy_remaining", 3) - 1
-			if mother.pregnancy_remaining > 0:
+			_ensure_consort_fields(character, mother, row.type)
+			var remaining = mother.get("pregnancy_remaining", 3)
+			var mom = mother.get("name", "")
+			# 孕期阶段事件（孕早期/中期/晚期，各 50% 出日志）
+			if randf() < 0.5:
+				if remaining == 3:
+					notices.append("🤰 %s孕中不适——孕吐频频，宜请稳婆安胎养神。" % mom)
+				elif remaining == 2:
+					notices.append("🤰 %s腹中胎动渐显——婆子们忙进忙出，举家欣喜。" % mom)
+				elif remaining == 1:
+					notices.append("🤰 %s临盆在即——稳婆已候，全家屏息以待。" % mom)
+			mother["pregnancy_remaining"] = remaining - 1
+			if mother["pregnancy_remaining"] > 0:
 				continue
+			# 分娩
 			mother["is_pregnant"] = false
 			mother["pregnancy_remaining"] = 0
-			var children = character.relationships.get("children", [])
-			var child = generate_child(character, row.type, i)
-			children.append(child)
-			character.relationships.children = children
-			if not GameState.family_data.family_tree.has("children"):
-				GameState.family_data.family_tree["children"] = []
-			GameState.family_data.family_tree.children.append(child)
-			var kind = "千金" if child.gender == "female" else "贵子"
-			var household_kind = ("嫡女" if child.gender == "female" else "嫡子") if row.kind_household == "嫡" else ""
-			var mom = mother.get("name", "")
-			notices.append(row.notice.format({
-				"kind": kind, "surname": child.surname, "name": child.name, "mom": mom
-			}))
-			add_household_event("birth", row.household.format({
-				"mom": mom, "household_kind": household_kind, "name": child.name, "kind": kind
-			}))
+			notices.append_array(_deliver_birth(character, row, mother, i))
 	return notices
 
-func generate_child(character: Dictionary, mother_type: String = "wife", mother_index: int = 0) -> Dictionary:
-	"""生成子女。mother_type: 'wife'=嫡出, 'concubine'=庶出, 'tongfang'=婢生"""
+func _deliver_birth(character: Dictionary, row: Dictionary, mother: Dictionary, mother_index: int) -> Array:
+	"""分娩判定：按孕妇年龄/健康/是否安胎掷骰，产出 顺产/多胞胎/难产/早产/死胎。返回通知数组。"""
+	var notices: Array = []
+	var mother_type: String = row.type
+	var mom = mother.get("name", "")
+	var mother_age = 0
+	if mother.has("birth_year"):
+		mother_age = GameState.current_year - mother.get("birth_year", GameState.current_year)
+	var health = mother.get("health", 70)
+	var an_tai = mother.get("an_tai", false)
+	# 风险掷骰（基数 + 高龄/体弱加成；安胎大幅降险）
+	var risk = 6.0
+	if mother_age >= 35:
+		risk += 8.0
+	elif mother_age >= 30:
+		risk += 4.0
+	if health < 50:
+		risk += 10.0
+	elif health < 70:
+		risk += 4.0
+	if an_tai:
+		risk *= 0.4
+	var roll = randf() * 100.0
+	var outcome = "normal"
+	if roll < 3.0:
+		outcome = "stillbirth"       # 死胎
+	elif roll < 8.0:
+		outcome = "difficult"        # 难产
+	elif roll < 11.0:
+		outcome = "premature"        # 早产
+	elif roll < 16.0:
+		outcome = "twins"            # 多胞胎（双胎）
+	# 母体产后损耗（难产额外重创）
+	mother["health"] = clampi(health - 15, 20, 100)
+	mother["birth_count"] = mother.get("birth_count", 0) + 1
+	mother["last_birth_year"] = GameState.current_year
+	mother["an_tai"] = false   # 安胎仅限本胎，产后再孕需重新请医
+	if outcome == "difficult":
+		mother["health"] = clampi(mother["health"] - randi_range(10, 25), 10, 100)
+	var children = character.relationships.get("children", [])
+	var birth_records: Array = []
+	match outcome:
+		"stillbirth":
+			mother["loyalty"] = max(10, mother.get("loyalty", 60) - 5)
+			GameState.household_data["harmony"] = max(0, GameState.household_data.get("harmony", 60) - 5)
+			notices.append("🪦 %s临盆，婴儿胎死腹中——举家哀恸。" % mom)
+			birth_records.append({"mother_type": mother_type, "mother_name": mom, "child": null, "outcome": "stillbirth", "outcome_text": "婴儿未能保住"})
+		"difficult":
+			var child = generate_child(character, mother_type, mother_index)
+			var died = randf() < 0.3
+			if died:
+				child["is_alive"] = false
+				mother["loyalty"] = max(10, mother.get("loyalty", 60) - 8)
+				notices.append("⚠ %s难产，婴儿%s未能活下，只得草草安葬。" % [mom, child.get("name", "")])
+			else:
+				mother["loyalty"] = max(10, mother.get("loyalty", 60) - 5)
+				notices.append("⚠ %s难产，挣扎数时才产下婴儿——母子俱存，实属侥幸。" % mom)
+			GameState.household_data["harmony"] = max(0, GameState.household_data.get("harmony", 60) - 5)
+			children.append(child)
+			character.relationships.children = children
+			_append_to_family_tree(child)
+			birth_records.append({"mother_type": mother_type, "mother_name": mom, "child": child, "outcome": "difficult", "outcome_text": "难产"})
+		"premature":
+			var child = generate_child(character, mother_type, mother_index, 3)
+			child["premature"] = true
+			children.append(child)
+			character.relationships.children = children
+			_append_to_family_tree(child)
+			notices.append("🌱 %s早产——婴儿%s体弱多病，需小心照看。" % [mom, child.get("name", "")])
+			birth_records.append({"mother_type": mother_type, "mother_name": mom, "child": child, "outcome": "premature", "outcome_text": "早产体弱"})
+		"twins":
+			var child1 = generate_child(character, mother_type, mother_index)
+			var child2 = generate_child(character, mother_type, mother_index, 2)
+			child1["is_twin"] = true
+			child2["is_twin"] = true
+			children.append(child1); children.append(child2)
+			character.relationships.children = children
+			_append_to_family_tree(child1); _append_to_family_tree(child2)
+			notices.append("🎉 %s产下双胎——%s与%s！家门大喜。" % [mom, child1.get("name", ""), child2.get("name", "")])
+			birth_records.append({"mother_type": mother_type, "mother_name": mom, "child": child1, "outcome": "twins", "outcome_text": "双胎"})
+			birth_records.append({"mother_type": mother_type, "mother_name": mom, "child": child2, "outcome": "twins", "outcome_text": "双胎"})
+		_:
+			var child = generate_child(character, mother_type, mother_index)
+			children.append(child)
+			character.relationships.children = children
+			_append_to_family_tree(child)
+			var kind = "千金" if child.gender == "female" else "贵子"
+			notices.append(row.notice.format({"kind": kind, "surname": child.surname, "name": child.name, "mom": mom}))
+			birth_records.append({"mother_type": mother_type, "mother_name": mom, "child": child, "outcome": "normal", "outcome_text": "顺产"})
+	# 家庭事件 + 生产弹窗数据（hud 消费 GameState.last_births）
+	for br in birth_records:
+		var child = br.get("child")
+		if child is Dictionary and not child.is_empty():
+			add_household_event("birth", "%s诞下%s" % [mom, child.get("name", "")])
+	GameState.last_births.append_array(birth_records)   # 累加，同季多胎/多妻均入弹窗
+	return notices
+
+func _append_to_family_tree(child: Dictionary) -> void:
+	"""把新生儿追加进家族树镜像"""
+	if not GameState.family_data.family_tree.has("children"):
+		GameState.family_data.family_tree["children"] = []
+	GameState.family_data.family_tree.children.append(child)
+
+func settle_womb(character: Dictionary, mother_type: String, mother_index: int) -> Dictionary:
+	"""安胎：花 10 石，降难产/死胎风险（_deliver_birth 读 an_tai 标记）。返回结果消息。"""
+	var mother = _consort_member(character, mother_type, mother_index)
+	if mother.is_empty():
+		return {"ok": false, "msg": "未找到该妻妾。"}
+	if not mother.get("is_pregnant", false):
+		return {"ok": false, "msg": "%s并未有孕，无需安胎。" % mother.get("name", "")}
+	if mother.get("an_tai", false):
+		return {"ok": false, "msg": "%s已在安胎调理中。" % mother.get("name", "")}
+	if GameState.household_data.get("wealth", 0) < 10:
+		return {"ok": false, "msg": "家财不足，请不起稳婆名医（需 10 石）。"}
+	GameState.household_data["wealth"] = GameState.household_data.get("wealth", 0) - 10
+	mother["an_tai"] = true
+	return {"ok": true, "msg": "为%s请来稳婆名医安胎，产期可安稳几分。" % mother.get("name", "")}
+
+func generate_child(character: Dictionary, mother_type: String = "wife", mother_index: int = 0, attr_penalty: int = 0, is_incest: bool = false) -> Dictionary:
+	"""生成子女。mother_type: 'wife'=嫡出, 'concubine'=庶出, 'tongfang'=婢生。attr_penalty：早产/多胎等减值；is_incest：孽种标记。"""
 	var gender = "male" if randf() < 0.5 else "female"
 	var male_names = ["伯禽", "仲山", "叔向", "季札", "子产", "子思", "无忌", "去疾", "无恤", "展禽"]
 	var female_names = ["仲姜", "季嬴", "孟任", "叔姬", "伯芈", "少姚", "淑姬", "惠姜"]
@@ -1119,7 +1248,7 @@ func generate_child(character: Dictionary, mother_type: String = "wife", mother_
 	for key in ["con", "int", "str", "cha", "vir", "luk"]:
 		var f_val = father_attrs.get(key, 10)
 		var m_val = mother_attrs.get(key, 10)
-		attrs[key] = clampi(int((f_val + m_val) / 2.0) + randi_range(-attr_variance, attr_variance), 3, 20)
+		attrs[key] = clampi(int((f_val + m_val) / 2.0) + randi_range(-attr_variance, attr_variance) - attr_penalty, 3, 20)
 	# 计算同母出生序
 	var existing = character.relationships.get("children", [])
 	var birth_order = 1
@@ -1142,6 +1271,7 @@ func generate_child(character: Dictionary, mother_type: String = "wife", mother_
 		"education_progress": 0,
 		"is_heir": false,
 		"is_separated": false,
+		"is_incest": is_incest,
 	}
 
 func loyalty_band(l: int) -> String:
@@ -1171,6 +1301,24 @@ func _consort_member(character: Dictionary, mother_type: String, mother_index: i
 	if mother_index >= 0 and mother_index < arr.size():
 		return arr[mother_index]
 	return {}
+
+func _ensure_consort_fields(character: Dictionary, mother: Dictionary, mother_type: String) -> void:
+	"""补齐妻妾持久字段（health/intimacy/birth_count/last_birth_year）——旧档兜底"""
+	if mother.is_empty():
+		return
+	var row := {}
+	for r in _consorts_table(character):
+		if r.type == mother_type:
+			row = r
+			break
+	if not mother.has("health"):
+		mother["health"] = int(row.get("default_health", 70))
+	if not mother.has("intimacy"):
+		mother["intimacy"] = int(row.get("default_intimacy", 50))
+	if not mother.has("birth_count"):
+		mother["birth_count"] = 0
+	if not mother.has("last_birth_year"):
+		mother["last_birth_year"] = -9999
 
 func _consort_label(mother_type: String) -> String:
 	"""妻妾类型的中文称呼"""

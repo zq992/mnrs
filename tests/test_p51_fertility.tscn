@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://test_p51_fertility"]
+
+[ext_resource type="Script" path="res://tests/test_p51_fertility.gd" id="1"]
+
+[node name="TestP51Fertility" type="Node"]
+script = ExtResource("1")

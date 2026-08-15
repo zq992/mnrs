@@ -51,6 +51,7 @@ var event_history: Array = []         # 已触发事件记录
 var completed_timeline_events: Array = []  # 已完成的时间线事件
 var full_log: Array = []              # 完整史册（UI 只显示最近200行，此处全量保存；上限见 LOG_FULL_MAX_LINES）
 var tutorial_done: bool = false       # 新手引导是否已完成（持久化，避免每局重复）
+var last_births: Array = []           # 本季分娩结果（含难产/死胎/多胞胎），hud 消费弹窗后清空
 
 # ============================================================
 # 地图状态

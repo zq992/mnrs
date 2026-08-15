@@ -1745,6 +1745,88 @@ func _show_exile_event(result: Dictionary) -> void:
 	vbox.add_child(btn)
 	add_child(popup)
 
+func _show_birth_popup(births: Array) -> void:
+	"""分娩结果弹窗——展示新生儿/双胎/难产/早产/死胎（异常用警示色）"""
+	if births.is_empty():
+		return
+	var popup := _make_popup("Birth", 250, 200)
+	var vbox := _popup_vbox(popup)
+	_add_popup_title(vbox, "🎎 分娩")
+	var body := ""
+	var danger := false
+	var has_normal := false
+	var idx := 0
+	while idx < births.size():
+		var br = births[idx]
+		var child = br.get("child")
+		var mom = br.get("mother_name", "")
+		var label = CharacterManager._consort_label(br.get("mother_type", "concubine"))
+		match br.get("outcome"):
+			"twins":
+				var child2 = {}
+				if idx + 1 < births.size() and births[idx + 1].get("outcome") == "twins":
+					child2 = births[idx + 1].get("child", {})
+				var c2_name = child2.get("name", child.get("name", "")) if not child2.is_empty() else child.get("name", "")
+				body += "　%s%s喜得双胎——%s与%s！\n" % [
+					label, mom,
+					("贵子" if child.get("gender") == "male" else "千金") + child.get("name", ""),
+					("贵子" if child2.get("gender") == "male" else "千金") + c2_name]
+				has_normal = true
+				if not child2.is_empty():
+					idx += 1
+			"normal":
+				body += "　%s%s产下%s%s（%s）！\n" % [
+					label, mom,
+					"千金" if child.get("gender") == "female" else "贵子",
+					child.get("name", ""), _best_attr_text(child)]
+				has_normal = true
+			"difficult":
+				danger = true
+				if child.get("is_alive", true):
+					body += "　⚠️ %s%s难产，%s%s侥幸存活（%s）。\n" % [
+						label, mom, "千金" if child.get("gender") == "female" else "贵子",
+						child.get("name", ""), _best_attr_text(child)]
+				else:
+					body += "　⚠️ %s%s难产，婴儿%s未能活下……\n" % [label, mom, child.get("name", "")]
+			"premature":
+				body += "　%s%s早产——%s%s体弱多病，需小心照看。\n" % [
+					label, mom, "千金" if child.get("gender") == "female" else "贵子", child.get("name", "")]
+			"stillbirth":
+				danger = true
+				body += "　🪦 %s%s产下死胎，婴儿未能保住……\n" % [label, mom]
+		idx += 1
+	var info := Label.new()
+	info.text = body.strip_edges()
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if danger:
+		info.add_theme_color_override("font_color", Color(0.9, 0.6, 0.5))
+	elif has_normal:
+		info.add_theme_color_override("font_color", Color(0.7, 0.85, 0.75))
+	vbox.add_child(info)
+	var btn := Button.new()
+	btn.text = "抚慰家眷"
+	btn.custom_minimum_size = Vector2(0, 36)
+	btn.pressed.connect(func():
+		popup.queue_free()
+		_refresh_display())
+	vbox.add_child(btn)
+	add_child(popup)
+
+func _best_attr_text(child: Dictionary) -> String:
+	"""新生儿最优资质亮点（如 '聪慧过人'）"""
+	var attrs = child.get("attributes", {})
+	var best_key = ""
+	var best_val = -1
+	for k in ["int", "cha", "str", "con", "vir", "luk"]:
+		var v = attrs.get(k, 0)
+		if v > best_val:
+			best_val = v
+			best_key = k
+	var names = {"int": "聪慧", "cha": "俊秀", "str": "孔武", "con": "康健", "vir": "明德", "luk": "气运"}
+	if best_val >= 14:
+		return "资质" + names.get(best_key, "出众") + "过人"
+	return "资质平平"
+
 func _show_infidelity_popup(notices: Array) -> void:
 	"""出轨发现弹窗——逐个处理"""
 	for notice in notices:
@@ -2269,6 +2351,10 @@ func _on_advance_time() -> void:
 		var pregnancy_notices = CharacterManager.process_pregnancies(char)
 		for notice in pregnancy_notices:
 			_add_log(notice)
+		# 分娩结果弹窗（顺产/双胎/难产/早产/死胎）
+		if not GameState.last_births.is_empty():
+			_show_birth_popup(GameState.last_births)
+			GameState.last_births = []
 
 	# ── 兄弟姐妹好感漂移 + 事件检测 ──
 	_update_sibling_affection()
